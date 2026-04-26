@@ -23,3 +23,18 @@
     name: tailscaled
     enabled: true
     state: started
+
+- name: Check tailscale connection state
+  ansible.builtin.command: tailscale status --json
+  register: ts_status_raw
+  changed_when: false
+  failed_when: false
+
+- name: Join tailnet
+  ansible.builtin.command:
+    cmd: "tailscale up --authkey={{ tailscale_authkey }} --accept-routes"
+  register: ts_up
+  changed_when: true
+  no_log: true
+  when: (ts_status_raw.stdout | default('{}') | from_json).get('BackendState', '') != 'Running'
+

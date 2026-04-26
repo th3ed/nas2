@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenClaw gateway (containerized, GPU)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker rm -f openclaw
+ExecStart=/usr/bin/docker run --rm --name openclaw \
+    --gpus all \
+    --network=host \
+    -v /home/{{ ansible_user }}/.openclaw:/home/node/.openclaw \
+    {{ openclaw_image }}
+ExecStop=/usr/bin/docker stop openclaw
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

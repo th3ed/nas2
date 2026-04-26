@@ -12,7 +12,9 @@
     - { role: cuda,                       tags: [cuda, gpu] }
     - { role: ollama,                     tags: [ollama] }
     - { role: openclaw,                   tags: [openclaw] }
+    - { role: tailscale,                  tags: [tailscale] }
+    - { role: caddy,                      tags: [caddy] }
     - { role: user_shell,                 tags: [user_shell] }
     - { role: claude_code,                tags: [claude_code] }
-    - { role: tailscale,                  tags: [tailscale] }
     - { role: wifi,                       tags: [wifi] }
+    - { role: firewall,                   tags: [firewall] }

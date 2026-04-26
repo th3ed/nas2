@@ -21,6 +21,12 @@
 
 # Per-SSID 5/6 GHz band locking must be done manually with knowledge of
 # the SSID, e.g. `nmcli con mod <SSID> wifi.band a`. Not templated here.
+- name: Ensure NetworkManager conf.d exists
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    mode: "0755"
+
 - name: Disable wifi powersave globally in NetworkManager
   ansible.builtin.copy:
     dest: /etc/NetworkManager/conf.d/10-wifi-powersave.conf

@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew Tailscale TLS certificate for Caddy
+After=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/tailscale cert \
+  --cert-file {{ caddy_tailscale_cert }} \
+  --key-file {{ caddy_tailscale_key }} \
+  {{ caddy_tailscale_hostname }}
+ExecStartPost=/bin/systemctl reload caddy

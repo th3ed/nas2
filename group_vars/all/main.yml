@@ -7,18 +7,19 @@ docker_users:
 docker_apt_release: noble
 
 tailscale_apt_release: noble
+tailscale_authkey: "{{ vault_tailscale_authkey }}"
 
 cuda_version: "12.6.0"
 cuda_image: "nvidia/cuda:{{ cuda_version }}-cudnn-devel-ubuntu24.04"
 
-ollama_image: ollama/ollama:latest
+ollama_image: ollama/ollama:0.21.2
 ollama_bind: "127.0.0.1:11434"
 ollama_data_volume: /var/lib/ollama
 ollama_models:
   - qwen3-coder
   - gemma4:e4b
 
-openclaw_image: ghcr.io/openclaw/openclaw:latest
+openclaw_image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
 
 shell_user: ed
 shell_zsh_theme: robbyrussell
@@ -32,3 +33,12 @@ console_fontface: Terminus
 console_fontsize: 32x16
 
 wifi_country: US
+
+caddy_tailscale_hostname: nas2.taile9c9c.ts.net
+caddy_tailscale_cert: /etc/caddy/nas2.crt
+caddy_tailscale_key: /etc/caddy/nas2.key
+
+firewall_allowed_tcp_ports:
+  - "22"
+  - "80"
+  - "443"

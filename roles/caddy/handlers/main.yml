@@ -1,0 +1,12 @@
+---
+- name: Reload caddy
+  ansible.builtin.systemd:
+    name: caddy
+    state: reloaded
+
+- name: Enable tailscale cert renewal timer
+  ansible.builtin.systemd:
+    name: tailscale-cert-renew.timer
+    enabled: true
+    state: started
+    daemon_reload: true

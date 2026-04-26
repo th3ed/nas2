@@ -13,9 +13,11 @@
     state: present
     update_cache: true
 
-- name: Install Node.js
+- name: Install Node.js and npm
   ansible.builtin.apt:
-    name: nodejs
+    name:
+      - nodejs
+      - npm
     state: present
 
 - name: Install Claude Code globally
@@ -23,4 +25,5 @@
     name: "@anthropic-ai/claude-code"
     global: true
     state: latest
+    executable: /usr/bin/npm
   when: not ansible_check_mode

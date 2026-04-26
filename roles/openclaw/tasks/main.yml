@@ -9,3 +9,32 @@
     src: openclaw.j2
     dest: /usr/local/bin/openclaw
     mode: "0755"
+
+- name: Ensure ~/.openclaw config directory exists
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.openclaw"
+    state: directory
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+
+- name: Deploy ~/.openclaw/openclaw.json
+  ansible.builtin.template:
+    src: openclaw.json.j2
+    dest: "/home/{{ ansible_user }}/.openclaw/openclaw.json"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  notify: restart openclaw
+
+- name: Deploy openclaw systemd service
+  ansible.builtin.template:
+    src: openclaw.service.j2
+    dest: /etc/systemd/system/openclaw.service
+    mode: "0644"
+  notify: restart openclaw
+
+- name: Enable and start openclaw service
+  ansible.builtin.systemd:
+    name: openclaw
+    enabled: true
+    state: started
+    daemon_reload: true
