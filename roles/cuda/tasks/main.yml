@@ -1,0 +1,18 @@
+---
+- name: Pre-pull NVIDIA CUDA + cuDNN devel image
+  community.docker.docker_image:
+    name: "{{ cuda_image }}"
+    source: pull
+
+- name: Document the pulled CUDA image for future container workflows
+  ansible.builtin.copy:
+    dest: /opt/cuda-image.txt
+    mode: "0644"
+    content: |
+      CUDA + cuDNN are provided via the official NVIDIA container image:
+
+          {{ cuda_image }}
+
+      Build GPU workloads `FROM {{ cuda_image }}` and run with
+      `docker run --rm --gpus all ...`. cuda-toolkit and libcudnn are
+      intentionally not installed on the host.

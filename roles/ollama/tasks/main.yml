@@ -1,0 +1,27 @@
+---
+- name: Create ollama data volume
+  ansible.builtin.file:
+    path: "{{ ollama_data_volume }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Pull ollama image
+  community.docker.docker_image:
+    name: "{{ ollama_image }}"
+    source: pull
+
+- name: Install ollama systemd unit
+  ansible.builtin.template:
+    src: ollama.service.j2
+    dest: /etc/systemd/system/ollama.service
+    mode: "0644"
+  notify: Restart ollama
+
+- name: Enable and start ollama
+  ansible.builtin.systemd:
+    name: ollama
+    enabled: true
+    state: started
+    daemon_reload: true

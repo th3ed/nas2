@@ -1,0 +1,50 @@
+---
+- name: Ensure /etc/apt/keyrings exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Fetch NVIDIA Container Toolkit GPG key
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: /tmp/nvidia-container-toolkit.gpgkey
+    mode: "0644"
+  check_mode: false
+
+- name: Dearmor NVIDIA Container Toolkit GPG key
+  ansible.builtin.command:
+    cmd: gpg --batch --yes --dearmor -o /etc/apt/keyrings/nvidia-container-toolkit.gpg /tmp/nvidia-container-toolkit.gpgkey
+    creates: /etc/apt/keyrings/nvidia-container-toolkit.gpg
+
+- name: Add NVIDIA Container Toolkit apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/nvidia-container-toolkit.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /
+  register: nct_repo
+
+- name: Refresh apt cache after adding NVIDIA Container Toolkit repo
+  ansible.builtin.apt:
+    update_cache: true
+  when: nct_repo.changed
+
+- name: Install nvidia-container-toolkit
+  ansible.builtin.apt:
+    name: nvidia-container-toolkit
+    state: present
+
+- name: Check whether docker daemon already knows the nvidia runtime
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: daemon_json_raw
+  failed_when: false
+
+- name: Register nvidia runtime with Docker
+  ansible.builtin.command:
+    cmd: nvidia-ctk runtime configure --runtime=docker
+  when: >
+    daemon_json_raw.content is not defined
+    or '"nvidia"' not in (daemon_json_raw.content | b64decode)
+  notify: Restart docker

@@ -1,0 +1,11 @@
+---
+- name: Pull OpenClaw image
+  community.docker.docker_image:
+    name: "{{ openclaw_image }}"
+    source: pull
+
+- name: Install /usr/local/bin/openclaw wrapper
+  ansible.builtin.template:
+    src: openclaw.j2
+    dest: /usr/local/bin/openclaw
+    mode: "0755"

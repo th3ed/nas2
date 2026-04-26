@@ -1,0 +1,16 @@
+---
+nvidia_cuda_repo_distro: ubuntu2604
+nvidia_driver_package: cuda-drivers
+
+docker_users:
+  - ed
+docker_apt_release: noble
+
+cuda_version: "12.6.0"
+cuda_image: "nvidia/cuda:{{ cuda_version }}-cudnn-devel-ubuntu24.04"
+
+ollama_image: ollama/ollama:latest
+ollama_bind: "127.0.0.1:11434"
+ollama_data_volume: /var/lib/ollama
+
+openclaw_image: ghcr.io/openclaw/openclaw:latest

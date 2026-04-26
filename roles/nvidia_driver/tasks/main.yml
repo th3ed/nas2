@@ -1,0 +1,21 @@
+---
+- name: Download NVIDIA cuda-keyring package
+  ansible.builtin.get_url:
+    url: "https://developer.download.nvidia.com/compute/cuda/repos/{{ nvidia_cuda_repo_distro }}/x86_64/cuda-keyring_1.1-1_all.deb"
+    dest: /tmp/cuda-keyring_1.1-1_all.deb
+    mode: "0644"
+  check_mode: false
+
+- name: Install NVIDIA cuda-keyring (registers signed repo + key)
+  ansible.builtin.apt:
+    deb: /tmp/cuda-keyring_1.1-1_all.deb
+
+- name: Refresh apt cache after adding NVIDIA repo
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install latest proprietary NVIDIA driver
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_package }}"
+    state: present
+  notify: Reboot for driver

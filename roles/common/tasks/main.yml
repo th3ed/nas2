@@ -1,0 +1,23 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - git
+      - python3-debian
+      - unattended-upgrades
+    state: present
+
+- name: Enable unattended-upgrades
+  ansible.builtin.systemd:
+    name: unattended-upgrades
+    enabled: true
+    state: started

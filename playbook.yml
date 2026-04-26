@@ -1,0 +1,13 @@
+---
+- name: Configure nas2 for GPU-accelerated containers
+  hosts: gpu_hosts
+  gather_facts: true
+
+  roles:
+    - { role: common,                     tags: [common] }
+    - { role: nvidia_driver,              tags: [nvidia_driver, gpu] }
+    - { role: docker,                     tags: [docker] }
+    - { role: nvidia_container_toolkit,   tags: [nvidia_container_toolkit, gpu] }
+    - { role: cuda,                       tags: [cuda, gpu] }
+    - { role: ollama,                     tags: [ollama] }
+    - { role: openclaw,                   tags: [openclaw] }
