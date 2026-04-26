@@ -1,0 +1,4 @@
+---
+- name: Apply console-setup
+  ansible.builtin.command: setupcon --force
+  changed_when: true

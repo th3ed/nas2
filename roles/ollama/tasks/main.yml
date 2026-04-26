@@ -25,3 +25,23 @@
     enabled: true
     state: started
     daemon_reload: true
+
+- name: Wait for ollama API
+  ansible.builtin.uri:
+    url: "http://{{ ollama_bind }}/api/tags"
+    status_code: 200
+  register: _ollama_ready
+  retries: 30
+  delay: 2
+  until: _ollama_ready.status == 200
+
+- name: List models already present
+  ansible.builtin.command: docker exec ollama ollama list
+  register: _ollama_list
+  changed_when: false
+
+- name: Pull configured models
+  ansible.builtin.command: "timeout 1800 docker exec ollama ollama pull {{ item }}"
+  loop: "{{ ollama_models }}"
+  when: item not in _ollama_list.stdout
+  changed_when: true

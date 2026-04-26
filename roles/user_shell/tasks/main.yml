@@ -1,0 +1,68 @@
+---
+- name: Install zsh and git
+  ansible.builtin.apt:
+    name:
+      - zsh
+      - git
+    state: present
+
+- name: Look up user home directory
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ shell_user }}"
+
+- name: Set shell_user_home fact
+  ansible.builtin.set_fact:
+    shell_user_home: "{{ getent_passwd[shell_user][4] }}"
+
+- name: Clone oh-my-zsh
+  ansible.builtin.git:
+    repo: https://github.com/ohmyzsh/ohmyzsh.git
+    dest: "{{ shell_user_home }}/.oh-my-zsh"
+    depth: 1
+    update: false
+    version: master
+  become: true
+  become_user: "{{ shell_user }}"
+
+- name: Clone zsh-autosuggestions
+  ansible.builtin.git:
+    repo: https://github.com/zsh-users/zsh-autosuggestions.git
+    dest: "{{ shell_user_home }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+    depth: 1
+    update: false
+    version: master
+  become: true
+  become_user: "{{ shell_user }}"
+
+- name: Clone zsh-syntax-highlighting
+  ansible.builtin.git:
+    repo: https://github.com/zsh-users/zsh-syntax-highlighting.git
+    dest: "{{ shell_user_home }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+    depth: 1
+    update: false
+    version: master
+  become: true
+  become_user: "{{ shell_user }}"
+
+- name: Install .zshrc
+  ansible.builtin.template:
+    src: zshrc.j2
+    dest: "{{ shell_user_home }}/.zshrc"
+    owner: "{{ shell_user }}"
+    group: "{{ shell_user }}"
+    mode: "0644"
+
+- name: Add ollama alias to .bashrc
+  ansible.builtin.lineinfile:
+    path: "{{ shell_user_home }}/.bashrc"
+    line: "alias ollama='docker exec -it ollama ollama'"
+    create: true
+    owner: "{{ shell_user }}"
+    group: "{{ shell_user }}"
+    mode: "0644"
+
+- name: Set zsh as login shell
+  ansible.builtin.user:
+    name: "{{ shell_user }}"
+    shell: /usr/bin/zsh

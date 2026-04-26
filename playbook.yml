@@ -5,9 +5,14 @@
 
   roles:
     - { role: common,                     tags: [common] }
+    - { role: console_font,               tags: [console_font] }
     - { role: nvidia_driver,              tags: [nvidia_driver, gpu] }
     - { role: docker,                     tags: [docker] }
     - { role: nvidia_container_toolkit,   tags: [nvidia_container_toolkit, gpu] }
     - { role: cuda,                       tags: [cuda, gpu] }
     - { role: ollama,                     tags: [ollama] }
     - { role: openclaw,                   tags: [openclaw] }
+    - { role: user_shell,                 tags: [user_shell] }
+    - { role: claude_code,                tags: [claude_code] }
+    - { role: tailscale,                  tags: [tailscale] }
+    - { role: wifi,                       tags: [wifi] }

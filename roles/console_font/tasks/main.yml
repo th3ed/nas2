@@ -1,0 +1,21 @@
+---
+- name: Install console-setup and kbd
+  ansible.builtin.apt:
+    name:
+      - console-setup
+      - kbd
+    state: present
+
+- name: Set console FONTFACE
+  ansible.builtin.lineinfile:
+    path: /etc/default/console-setup
+    regexp: '^FONTFACE='
+    line: 'FONTFACE="{{ console_fontface }}"'
+  notify: Apply console-setup
+
+- name: Set console FONTSIZE
+  ansible.builtin.lineinfile:
+    path: /etc/default/console-setup
+    regexp: '^FONTSIZE='
+    line: 'FONTSIZE="{{ console_fontsize }}"'
+  notify: Apply console-setup

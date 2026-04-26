@@ -6,11 +6,29 @@ docker_users:
   - ed
 docker_apt_release: noble
 
+tailscale_apt_release: noble
+
 cuda_version: "12.6.0"
 cuda_image: "nvidia/cuda:{{ cuda_version }}-cudnn-devel-ubuntu24.04"
 
 ollama_image: ollama/ollama:latest
 ollama_bind: "127.0.0.1:11434"
 ollama_data_volume: /var/lib/ollama
+ollama_models:
+  - qwen3-coder
+  - gemma4:e4b
 
 openclaw_image: ghcr.io/openclaw/openclaw:latest
+
+shell_user: ed
+shell_zsh_theme: robbyrussell
+shell_zsh_plugins:
+  - git
+  - docker
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
+
+console_fontface: Terminus
+console_fontsize: 32x16
+
+wifi_country: US
