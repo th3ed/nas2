@@ -16,7 +16,7 @@ ollama_image: ollama/ollama:0.21.2
 ollama_bind: "127.0.0.1:11434"
 ollama_data_volume: /var/lib/ollama
 ollama_models:
-  - qwen3-coder
+  - qwen3-coder-next:latest
   - gemma4:e4b
 
 openclaw_image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim

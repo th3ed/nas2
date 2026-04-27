@@ -11,6 +11,7 @@ ExecStartPre=-/usr/bin/docker rm -f openclaw
 ExecStart=/usr/bin/docker run --rm --name openclaw \
     --gpus all \
     --network=host \
+    -e TELEGRAM_BOT_TOKEN={{ vault_openclaw_telegram_bot_token }} \
     -v /home/{{ ansible_user }}/.openclaw:/home/node/.openclaw \
     {{ openclaw_image }}
 ExecStop=/usr/bin/docker stop openclaw

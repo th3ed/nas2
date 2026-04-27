@@ -17,14 +17,6 @@
     mode: "0700"
     owner: "{{ ansible_user }}"
 
-- name: Deploy ~/.openclaw/openclaw.json
-  ansible.builtin.template:
-    src: openclaw.json.j2
-    dest: "/home/{{ ansible_user }}/.openclaw/openclaw.json"
-    mode: "0600"
-    owner: "{{ ansible_user }}"
-  notify: restart openclaw
-
 - name: Deploy openclaw systemd service
   ansible.builtin.template:
     src: openclaw.service.j2
