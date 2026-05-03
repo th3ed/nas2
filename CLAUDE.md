@@ -72,7 +72,7 @@ The `ollama`, `openclaw`, `caddy`, and `cuda` roles are tagged `legacy` and rema
 
 ### Branch tracking
 
-Argo's child Applications in `gitops/apps/*.yaml` hardcode `targetRevision: k8s` for the `th3ed/nas2` git source (this matches the development branch). The `gitops_repo_branch` Ansible variable also defaults to `k8s` and is wired into the *root* Application template (`roles/argocd_bootstrap/templates/root-app.yaml.j2`). When merging to `main`, update **both** in lockstep: `group_vars/all/main.yml`'s `gitops_repo_branch` AND every `targetRevision: k8s` line in `gitops/apps/*.yaml`. (Not templatized — see plan for tradeoff.)
+Argo's child Applications in `gitops/apps/*.yaml` and the `gitops_repo_branch` Ansible variable in `group_vars/all/main.yml` all track `main`. If you ever work on a feature branch, update these in lockstep before applying.
 
 ### Renovate
 

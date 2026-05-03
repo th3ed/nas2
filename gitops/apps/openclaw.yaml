@@ -12,7 +12,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/th3ed/nas2.git
-    targetRevision: k8s
+    targetRevision: main
     path: gitops/manifests/openclaw
   destination:
     server: https://kubernetes.default.svc

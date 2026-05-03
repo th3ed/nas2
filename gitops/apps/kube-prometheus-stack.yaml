@@ -19,10 +19,10 @@ spec:
         valueFiles:
           - $values/gitops/manifests/kube-prometheus-stack/values.yaml
     - repoURL: https://github.com/th3ed/nas2.git
-      targetRevision: k8s
+      targetRevision: main
       ref: values
     - repoURL: https://github.com/th3ed/nas2.git
-      targetRevision: k8s
+      targetRevision: main
       path: gitops/manifests/kube-prometheus-stack
   destination:
     server: https://kubernetes.default.svc
