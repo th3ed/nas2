@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: operator-oauth
+  namespace: tailscale
+type: Opaque
+stringData:
+  client_id: "{{ vault_tailscale_operator_oauth_client_id }}"
+  client_secret: "{{ vault_tailscale_operator_oauth_client_secret }}"

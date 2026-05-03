@@ -1,0 +1,33 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: loki
+      targetRevision: 6.20.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/gitops/manifests/loki/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

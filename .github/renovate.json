@@ -3,27 +3,53 @@
   "extends": ["config:base"],
   "regexManagers": [
     {
-      "fileMatch": ["^group_vars/all\\.yml$"],
+      "fileMatch": ["^group_vars/all/main\\.yml$"],
       "matchStrings": [
-        "ollama_image:\\s*\"(?<depName>[^:]+):(?<currentValue>[^\"]+)\""
+        "ollama_image:\\s*\"?(?<depName>[^:\\s\"]+):(?<currentValue>[^\\s\"]+)\"?",
+        "openclaw_image:\\s*\"?(?<depName>[^:\\s\"]+):(?<currentValue>[^\\s\"]+)\"?"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
     },
     {
-      "fileMatch": ["^group_vars/all\\.yml$"],
+      "fileMatch": ["^gitops/manifests/.+/values\\.yaml$"],
       "matchStrings": [
-        "openclaw_image:\\s*\"(?<depName>[^:]+):(?<currentValue>[^\"]+)\""
+        "repository:\\s*(?<depName>[^\\s]+)\\s+tag:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "fileMatch": ["^gitops/manifests/openclaw/deployment\\.yaml$"],
+      "matchStrings": [
+        "image:\\s*(?<depName>[^:\\s]+):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "fileMatch": ["^gitops/apps/.+\\.yaml$"],
+      "matchStrings": [
+        "chart:\\s*(?<depName>[^\\s]+)\\s+targetRevision:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
+      ],
+      "datasourceTemplate": "helm",
+      "versioningTemplate": "helm"
+    },
+    {
+      "fileMatch": ["^roles/k3s/defaults/main\\.yml$"],
+      "matchStrings": [
+        "k3s_version:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
+      "matchDatasources": ["docker", "helm", "github-releases"],
       "automerge": false,
-      "labels": ["dependencies", "docker"]
+      "labels": ["dependencies"]
     }
   ]
 }

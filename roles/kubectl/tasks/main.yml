@@ -1,0 +1,43 @@
+---
+- name: Symlink k3s kubectl as /usr/local/bin/kubectl
+  ansible.builtin.file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/kubectl
+    state: link
+    force: true
+
+- name: Check installed helm
+  ansible.builtin.command: helm version --short
+  register: helm_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download helm install script
+  ansible.builtin.get_url:
+    url: "{{ helm_install_script_url }}"
+    dest: /tmp/get-helm-3.sh
+    mode: "0755"
+  when: helm_installed.rc != 0
+
+- name: Install helm
+  ansible.builtin.command:
+    cmd: /tmp/get-helm-3.sh
+  when: helm_installed.rc != 0
+  changed_when: true
+
+- name: Look up user home directory
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ kubectl_user }}"
+
+- name: Set KUBECONFIG in user shell rc files
+  ansible.builtin.lineinfile:
+    path: "{{ getent_passwd[kubectl_user][4] }}/{{ item }}"
+    line: "export KUBECONFIG={{ kubeconfig_path }}"
+    create: true
+    owner: "{{ kubectl_user }}"
+    mode: "0644"
+    state: present
+  loop:
+    - .bashrc
+    - .zshrc

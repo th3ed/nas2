@@ -1,0 +1,33 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tailscale-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://pkgs.tailscale.com/helmcharts
+      chart: tailscale-operator
+      targetRevision: 1.78.1
+      helm:
+        releaseName: tailscale-operator
+        valueFiles:
+          - $values/gitops/manifests/tailscale-operator/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tailscale
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

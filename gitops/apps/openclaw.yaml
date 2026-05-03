@@ -1,0 +1,26 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openclaw
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: k8s
+    path: gitops/manifests/openclaw
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openclaw
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

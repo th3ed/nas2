@@ -42,3 +42,23 @@ firewall_allowed_tcp_ports:
   - "22"
   - "80"
   - "443"
+  - "6443"
+
+# Tailnet domain — used for Tailscale Operator MagicDNS hostnames
+# (e.g. ollama.taile9c9c.ts.net). Source of truth for the suffix in
+# caddy_tailscale_hostname above.
+tailnet_domain: taile9c9c.ts.net
+
+# k3s
+k3s_version: "v1.32.1+k3s1"
+
+# Argo CD / GitOps
+gitops_repo_url: "https://github.com/th3ed/nas2.git"
+gitops_repo_branch: "k8s"
+gitops_apps_path: "gitops/apps"
+
+# Vault keys to add via `ansible-vault edit group_vars/all/vault.yml`:
+#   vault_bitwarden_sm_token                  — Bitwarden Secrets Manager machine-account access token
+#   vault_tailscale_operator_oauth_client_id  — Tailscale OAuth client ID (k8s-operator scope)
+#   vault_tailscale_operator_oauth_client_secret
+#   vault_grafana_admin_password

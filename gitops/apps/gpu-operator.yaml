@@ -1,0 +1,36 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gpu-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.ngc.nvidia.com/nvidia
+      chart: gpu-operator
+      targetRevision: v24.9.1
+      helm:
+        releaseName: gpu-operator
+        valueFiles:
+          - $values/gitops/manifests/gpu-operator/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      ref: values
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      path: gitops/manifests/gpu-operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,22 @@
+---
+driver:
+  enabled: false
+
+toolkit:
+  enabled: false
+
+devicePlugin:
+  config:
+    name: time-slicing-config
+    default: any
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+nodeStatusExporter:
+  enabled: true
+
+operator:
+  defaultRuntime: containerd

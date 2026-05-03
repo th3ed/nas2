@@ -1,0 +1,16 @@
+---
+# OAuth credentials are pre-created in Secret tailscale/operator-oauth by the
+# argocd_bootstrap Ansible role from vault. Do NOT set oauth.clientId or
+# oauth.clientSecret here — the chart only creates the Secret if those are
+# non-empty, and we want the pre-created Secret to remain authoritative.
+installCRDs: true
+
+operatorConfig:
+  defaultTags:
+    - "tag:k8s-operator"
+
+apiServerProxyConfig:
+  mode: "true"
+
+proxyConfig:
+  defaultTags: "tag:k8s"

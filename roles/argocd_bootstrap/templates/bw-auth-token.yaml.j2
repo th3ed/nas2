@@ -1,0 +1,11 @@
+{% for ns in bitwarden_namespaces %}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bw-auth-token
+  namespace: {{ ns }}
+type: Opaque
+stringData:
+  token: "{{ vault_bitwarden_sm_token }}"
+{% endfor %}

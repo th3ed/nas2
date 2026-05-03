@@ -1,0 +1,51 @@
+---
+fullnameOverride: kps
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsEnabled: true
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki-gateway.monitoring.svc.cluster.local
+      access: proxy
+  service:
+    type: ClusterIP
+
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 15d
+    resources:
+      requests:
+        memory: 1Gi
+      limits:
+        memory: 4Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 50Gi
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 5Gi

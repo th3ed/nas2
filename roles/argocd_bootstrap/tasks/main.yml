@@ -1,0 +1,65 @@
+---
+- name: Ensure required namespaces exist
+  ansible.builtin.shell:
+    cmd: |
+      kubectl create namespace {{ item }} --dry-run=client -o yaml | kubectl apply -f -
+  loop: "{{ ['argocd', 'tailscale', 'gpu-operator', 'metallb-system', 'sm-operator-system'] + bitwarden_namespaces }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+
+- name: Render bootstrap Secret manifests
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/root/.nas2-bootstrap-{{ item.name }}.yaml"
+    mode: "0600"
+  loop:
+    - { src: bw-auth-token.yaml.j2,            name: bw-auth-token }
+    - { src: tailscale-operator-oauth.yaml.j2, name: tailscale-operator-oauth }
+    - { src: grafana-admin.yaml.j2,            name: grafana-admin }
+  no_log: true
+
+- name: Apply bootstrap Secrets
+  ansible.builtin.command:
+    cmd: "kubectl apply -f /root/.nas2-bootstrap-{{ item }}.yaml"
+  loop:
+    - bw-auth-token
+    - tailscale-operator-oauth
+    - grafana-admin
+  changed_when: false
+
+- name: Add Argo CD helm repo
+  ansible.builtin.command:
+    cmd: "helm repo add argo {{ argocd_chart_repo }}"
+  register: argo_repo_add
+  changed_when: "'has been added' in argo_repo_add.stdout"
+  failed_when:
+    - argo_repo_add.rc != 0
+    - "'already exists' not in argo_repo_add.stderr"
+
+- name: Update helm repos
+  ansible.builtin.command:
+    cmd: helm repo update
+  changed_when: false
+
+- name: Install/upgrade Argo CD via helm
+  ansible.builtin.command:
+    cmd: >
+      helm upgrade --install argocd argo/argo-cd
+      --namespace {{ argocd_namespace }}
+      --version {{ argocd_chart_version }}
+      --set server.extraArgs={--insecure}
+      --wait --timeout 10m
+  register: argo_install
+  changed_when: "'has been upgraded' in argo_install.stdout or 'has been installed' in argo_install.stdout"
+
+- name: Render root Argo Application (app-of-apps)
+  ansible.builtin.template:
+    src: root-app.yaml.j2
+    dest: /root/.nas2-bootstrap-root-app.yaml
+    mode: "0644"
+
+- name: Apply root Argo Application
+  ansible.builtin.command:
+    cmd: kubectl apply -f /root/.nas2-bootstrap-root-app.yaml
+  changed_when: false

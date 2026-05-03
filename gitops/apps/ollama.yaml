@@ -1,0 +1,36 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ollama
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://otwld.github.io/ollama-helm/
+      chart: ollama
+      targetRevision: 1.5.0
+      helm:
+        releaseName: ollama
+        valueFiles:
+          - $values/gitops/manifests/ollama/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      ref: values
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: k8s
+      path: gitops/manifests/ollama
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ollama
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

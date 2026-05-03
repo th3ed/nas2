@@ -14,6 +14,11 @@
     default: allow
     direction: outgoing
 
+- name: Allow forwarding (required for k3s/flannel pod traffic)
+  community.general.ufw:
+    default: allow
+    direction: routed
+
 - name: Allow SSH, HTTP, HTTPS
   community.general.ufw:
     rule: allow

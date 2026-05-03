@@ -10,10 +10,10 @@
     - { role: docker,                     tags: [docker] }
     - { role: nvidia_container_toolkit,   tags: [nvidia_container_toolkit, gpu] }
     - { role: cuda,                       tags: [cuda, gpu] }
-    - { role: ollama,                     tags: [ollama] }
-    - { role: openclaw,                   tags: [openclaw] }
     - { role: tailscale,                  tags: [tailscale] }
-    - { role: caddy,                      tags: [caddy] }
+    - { role: k3s,                        tags: [k3s, kubernetes] }
+    - { role: kubectl,                    tags: [kubectl, kubernetes] }
+    - { role: argocd_bootstrap,           tags: [argocd, kubernetes] }
     - { role: user_shell,                 tags: [user_shell] }
     - { role: claude_code,                tags: [claude_code] }
     - { role: wifi,                       tags: [wifi] }

@@ -1,0 +1,4 @@
+---
+kubectl_user: ed
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+helm_install_script_url: "https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3"

@@ -1,0 +1,38 @@
+---
+- name: Check installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: "{{ k3s_install_script_url }}"
+    dest: /usr/local/bin/k3s-install.sh
+    mode: "0755"
+  when: k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout
+
+- name: Install k3s server with embedded etcd
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "server {{ k3s_server_args | join(' ') }}"
+  register: k3s_install
+  changed_when: "'No change detected' not in k3s_install.stdout"
+  when: k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout
+
+- name: Wait for k3s API to be ready
+  ansible.builtin.wait_for:
+    port: 6443
+    host: 127.0.0.1
+    timeout: 120
+
+- name: Wait for node to be Ready
+  ansible.builtin.command:
+    cmd: "k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=120s"
+  changed_when: false
+  retries: 5
+  delay: 10
+  register: k3s_node_ready
+  until: k3s_node_ready.rc == 0
