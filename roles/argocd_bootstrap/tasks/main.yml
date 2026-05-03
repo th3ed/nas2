@@ -31,6 +31,8 @@
 - name: Add Argo CD helm repo
   ansible.builtin.command:
     cmd: "helm repo add argo {{ argocd_chart_repo }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: argo_repo_add
   changed_when: "'has been added' in argo_repo_add.stdout"
   failed_when:
@@ -40,6 +42,8 @@
 - name: Update helm repos
   ansible.builtin.command:
     cmd: helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   changed_when: false
 
 - name: Install/upgrade Argo CD via helm
@@ -50,6 +54,8 @@
       --version {{ argocd_chart_version }}
       --set server.extraArgs={--insecure}
       --wait --timeout 10m
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: argo_install
   changed_when: "'has been upgraded' in argo_install.stdout or 'has been installed' in argo_install.stdout"
 

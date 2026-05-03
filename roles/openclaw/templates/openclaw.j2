@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-exec docker run --rm --gpus all \
-    --network=host \
-    -e DISPLAY="${DISPLAY:-}" \
-    -v /tmp/.X11-unix:/tmp/.X11-unix \
-    -v "${HOME}/.openclaw:/root/.openclaw" \
-    {{ openclaw_image }} "$@"

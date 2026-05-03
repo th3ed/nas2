@@ -20,3 +20,9 @@ nodeStatusExporter:
 
 operator:
   defaultRuntime: containerd
+
+# Match the value the CRD defaults to after apply, so the helm-rendered
+# manifest doesn't drift against the live ClusterPolicy spec.
+migManager:
+  config:
+    name: default-mig-parted-config

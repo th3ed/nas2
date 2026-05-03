@@ -13,17 +13,17 @@ make deps                        # Install Ansible Galaxy collections (run once)
 make ping                        # Test connectivity to nas2
 make check                       # Dry-run with diff output (safe to run anytime)
 make apply                       # Apply full playbook
-make apply-tags TAGS=ollama      # Apply specific roles by tag
+make apply-tags TAGS=firewall     # Apply specific roles by tag
 make k8s-bootstrap               # Apply only kubernetes tag (k3s + kubectl + argocd)
 make argo-sync                   # Force Argo to re-sync the root app-of-apps
 make argo-status                 # List Argo Applications + sync state
 ```
 
-Tags: `common`, `console_font`, `nvidia_driver`, `docker`, `nvidia_container_toolkit`, `cuda`, `tailscale`, `k3s`, `kubectl`, `argocd`, `kubernetes` (= k3s+kubectl+argocd), `ollama`, `openclaw`, `caddy` (legacy), `user_shell`, `claude_code`, `wifi`, `firewall`. Tag `gpu` = driver+toolkit+cuda. Tag `legacy` = the Docker/systemd workloads being phased out by k8s.
+Tags: `common`, `console_font`, `nvidia_driver`, `docker`, `nvidia_container_toolkit`, `cuda`, `tailscale`, `k3s`, `kubectl`, `argocd`, `kubernetes` (= k3s+kubectl+argocd), `user_shell`, `claude_code`, `wifi`, `firewall`. Tag `gpu` = driver+toolkit+cuda.
 
 ## After applying
 
-Invoke the `nas2-diag` skill to validate the deployment. Run with no args for a broad sweep, or `--service <name>` to focus. Valid services: `ollama`, `openclaw`, `caddy`, `tailscale`, `docker`, `gpu`, `firewall`, `k3s`, `argocd`, `grafana`, `loki`. The skill is read-only — collects `systemctl`, journals, `docker ps`, `kubectl get`, health curls, `nvidia-smi`. Never restarts or redeploys. Lives at `.claude/skills/nas2-diag/`.
+Invoke the `nas2-diag` skill to validate the deployment. Run with no args for a broad sweep, or `--service <name>` to focus. Valid services: `ollama`, `openclaw`, `tailscale`, `docker`, `gpu`, `firewall`, `k3s`, `argocd`, `grafana`, `loki`. The skill is read-only — collects `systemctl`, journals, `kubectl get`, health curls, `nvidia-smi`. Never restarts or redeploys. Lives at `.claude/skills/nas2-diag/`.
 
 ## Architecture
 
@@ -64,19 +64,13 @@ Storage: k3s' built-in **local-path-provisioner**. Single-node-only; migrate to 
 
 Secrets: **Bitwarden sm-operator**. Workload secrets are defined in Bitwarden Secrets Manager and pulled into K8s Secrets via `BitwardenSecret` CRDs. Each consuming namespace needs a `bw-auth-token` Secret (machine-account access token), created by `argocd_bootstrap` from `vault_bitwarden_sm_token`.
 
-### Legacy (being phased out)
-
-The `ollama`, `openclaw`, `caddy`, and `cuda` roles are tagged `legacy` and remain in `playbook.yml` only until per-service cutover completes. Cutover sequence per service: deploy k8s version → verify → migrate data → remove the systemd unit and drop the role from `playbook.yml`.
-
-**OpenClaw config wizard** under k8s: `kubectl exec -it -n openclaw deploy/openclaw -- openclaw setup`. Config persists on the `openclaw-config` PVC mounted at `/home/node/.openclaw`.
-
 ### Branch tracking
 
 Argo's child Applications in `gitops/apps/*.yaml` and the `gitops_repo_branch` Ansible variable in `group_vars/all/main.yml` all track `main`. If you ever work on a feature branch, update these in lockstep before applying.
 
 ### Renovate
 
-Watches: `group_vars/all/main.yml` (legacy `ollama_image`/`openclaw_image`), `gitops/manifests/*/values.yaml` (Helm chart image refs), `gitops/manifests/openclaw/deployment.yaml` (raw image), `gitops/apps/*.yaml` (Helm chart versions), `roles/k3s/defaults/main.yml` (k3s version from GitHub releases). Opens PRs automatically; no automerge.
+Watches: `gitops/manifests/*/values.yaml` (Helm chart image refs), `gitops/manifests/openclaw/deployment.yaml` (raw image), `gitops/apps/*.yaml` (Helm chart versions), `roles/k3s/defaults/main.yml` (k3s version from GitHub releases). Opens PRs automatically; no automerge.
 
 ## Target host assumptions
 
@@ -89,8 +83,7 @@ Watches: `group_vars/all/main.yml` (legacy `ollama_image`/`openclaw_image`), `gi
 
 Edit with `ansible-vault edit group_vars/all/vault.yml`:
 
-- `vault_tailscale_authkey` — host Tailscale daemon authkey (existing)
-- `vault_openclaw_telegram_bot_token` — currently used by legacy openclaw role; migrate to Bitwarden Secrets Manager and remove
+- `vault_tailscale_authkey` — host Tailscale daemon authkey
 - `vault_bitwarden_sm_token` — sm-operator machine-account access token
 - `vault_tailscale_operator_oauth_client_id` — k8s-operator OAuth client ID
 - `vault_tailscale_operator_oauth_client_secret` — k8s-operator OAuth client secret

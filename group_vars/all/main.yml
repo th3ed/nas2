@@ -12,15 +12,6 @@ tailscale_authkey: "{{ vault_tailscale_authkey }}"
 cuda_version: "12.6.0"
 cuda_image: "nvidia/cuda:{{ cuda_version }}-cudnn-devel-ubuntu24.04"
 
-ollama_image: ollama/ollama:0.21.2
-ollama_bind: "127.0.0.1:11434"
-ollama_data_volume: /var/lib/ollama
-ollama_models:
-  - qwen3-coder-next:latest
-  - gemma4:e4b
-
-openclaw_image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
-
 shell_user: ed
 shell_zsh_theme: robbyrussell
 shell_zsh_plugins:
@@ -34,10 +25,6 @@ console_fontsize: 32x16
 
 wifi_country: US
 
-caddy_tailscale_hostname: nas2.taile9c9c.ts.net
-caddy_tailscale_cert: /etc/caddy/nas2.crt
-caddy_tailscale_key: /etc/caddy/nas2.key
-
 firewall_allowed_tcp_ports:
   - "22"
   - "80"
@@ -45,8 +32,7 @@ firewall_allowed_tcp_ports:
   - "6443"
 
 # Tailnet domain — used for Tailscale Operator MagicDNS hostnames
-# (e.g. ollama.taile9c9c.ts.net). Source of truth for the suffix in
-# caddy_tailscale_hostname above.
+# (e.g. ollama.taile9c9c.ts.net).
 tailnet_domain: taile9c9c.ts.net
 
 # k3s

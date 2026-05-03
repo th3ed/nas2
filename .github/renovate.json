@@ -3,15 +3,6 @@
   "extends": ["config:base"],
   "regexManagers": [
     {
-      "fileMatch": ["^group_vars/all/main\\.yml$"],
-      "matchStrings": [
-        "ollama_image:\\s*\"?(?<depName>[^:\\s\"]+):(?<currentValue>[^\\s\"]+)\"?",
-        "openclaw_image:\\s*\"?(?<depName>[^:\\s\"]+):(?<currentValue>[^\\s\"]+)\"?"
-      ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
-    },
-    {
       "fileMatch": ["^gitops/manifests/.+/values\\.yaml$"],
       "matchStrings": [
         "repository:\\s*(?<depName>[^\\s]+)\\s+tag:\\s*\"?(?<currentValue>[^\\s\"]+)\"?"
