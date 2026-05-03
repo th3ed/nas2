@@ -10,19 +10,22 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://argoproj.github.io/argo-helm
-    chart: argo-cd
-    targetRevision: 7.7.10
-    helm:
-      releaseName: argocd
-      # Keep these values in sync with the helm install in
-      # roles/argocd_bootstrap/tasks/main.yml — Argo will detect drift and
-      # selfHeal otherwise.
-      values: |
-        server:
-          extraArgs:
-            - --insecure
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: 7.7.10
+      helm:
+        releaseName: argocd
+        # Keep these values in sync with the helm install in
+        # roles/argocd_bootstrap/tasks/main.yml — Argo will detect drift and
+        # selfHeal otherwise.
+        values: |
+          server:
+            extraArgs:
+              - --insecure
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/argocd
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
