@@ -21,3 +21,14 @@
     name: unattended-upgrades
     enabled: true
     state: started
+
+- name: Raise inotify limits for k3s/containerd
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-k3s.conf
+    reload: true
+  loop:
+    - { name: fs.inotify.max_user_instances, value: "8192" }
+    - { name: fs.inotify.max_user_watches,   value: "524288" }

@@ -1,0 +1,4 @@
+---
+# No custom values needed; defaults are sufficient.
+# The bw-auth-token Secret in each consuming namespace is created by
+# the argocd_bootstrap Ansible role, not the operator chart.

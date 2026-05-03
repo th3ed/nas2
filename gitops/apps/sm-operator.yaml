@@ -10,15 +10,17 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  # NOTE: verify the source path before first apply. The bitwarden/sm-kubernetes
-  # repo provides install via either a deploy/ directory of manifests OR a Helm
-  # chart at oci://ghcr.io/bitwarden/sm-operator-chart. If the path/chart name
-  # differs from the values below, switch to the OCI chart form (see
-  # https://bitwarden.com/help/secrets-manager-kubernetes-operator/).
-  source:
-    repoURL: https://github.com/bitwarden/sm-kubernetes.git
-    targetRevision: main
-    path: deploy
+  sources:
+    - repoURL: https://charts.bitwarden.com/
+      chart: sm-operator
+      targetRevision: 2.0.1
+      helm:
+        releaseName: sm-operator
+        valueFiles:
+          - $values/gitops/manifests/sm-operator/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: sm-operator-system
