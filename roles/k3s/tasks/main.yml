@@ -36,3 +36,15 @@
   delay: 10
   register: k3s_node_ready
   until: k3s_node_ready.rc == 0
+
+- name: Check if nvidia-ctk is available
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-ctk
+  register: nvidia_ctk_bin
+
+- name: Configure NVIDIA runtime in k3s containerd
+  ansible.builtin.command:
+    cmd: nvidia-ctk runtime configure --runtime=containerd --config=/var/lib/rancher/k3s/agent/etc/containerd/config.toml
+  register: nvidia_ctk_containerd
+  changed_when: "'Updated' in nvidia_ctk_containerd.stdout"
+  when: nvidia_ctk_bin.stat.exists

@@ -48,3 +48,8 @@
     daemon_json_raw.content is not defined
     or '"nvidia"' not in (daemon_json_raw.content | b64decode)
   notify: Restart docker
+
+- name: Generate CDI spec for nvidia GPU
+  ansible.builtin.command:
+    cmd: nvidia-ctk cdi generate --output=/var/run/cdi/nvidia.yaml
+  changed_when: false
