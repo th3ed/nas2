@@ -16,7 +16,11 @@ data:
         // Trust the Tailscale Operator's Ingress proxy to authenticate at the
         // perimeter. The proxy injects Tailscale-User-Login (and friends) on
         // forwarded requests; openclaw refuses auth.mode="none" with bind!="loopback",
-        // so this is the closest thing to "no auth on tailnet".
+        // so this is the closest thing to "no auth on tailnet". The k3s pod CIDR
+        // covers all in-cluster pods — the only entry path from outside is via
+        // the Tailscale Ingress proxy (also a pod), so trusting the CIDR is fine
+        // in this single-tenant cluster.
+        trustedProxies: ["10.42.0.0/24"],
         auth: {
           mode: "trusted-proxy",
           trustedProxy: {
