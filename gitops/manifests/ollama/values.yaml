@@ -31,7 +31,9 @@ service:
   type: ClusterIP
   port: 11434
 
-extraEnv: []
+extraEnv:
+  - name: OLLAMA_NUM_CTX
+    value: "32768"
 
 # Single-node now; spread across nodes in the future when multi-node arrives.
 replicaCount: 1
