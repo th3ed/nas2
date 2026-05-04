@@ -1,0 +1,76 @@
+---
+# Declarative OpenClaw runtime config. Mounted into the main container at
+# /home/node/.openclaw/openclaw.json via subPath so it sits alongside the
+# PVC-backed state directory. ${TELEGRAM_BOT_TOKEN} is interpolated by openclaw
+# at startup from the envFrom-injected openclaw-secrets Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-app-config
+  namespace: openclaw
+data:
+  openclaw.json: |
+    {
+      gateway: {
+        bind: "lan",
+        // Trust the Tailscale Operator's Ingress proxy to authenticate at the
+        // perimeter. The proxy injects Tailscale-User-Login (and friends) on
+        // forwarded requests; openclaw refuses auth.mode="none" with bind!="loopback",
+        // so this is the closest thing to "no auth on tailnet".
+        auth: {
+          mode: "trusted-proxy",
+          trustedProxy: {
+            userHeader: "Tailscale-User-Login",
+          },
+        },
+      },
+      channels: {
+        telegram: {
+          enabled: true,
+          botToken: "${TELEGRAM_BOT_TOKEN}",
+          dmPolicy: "allowlist",
+          allowFrom: ["tg:${TELEGRAM_OWNER_ID}"],
+        },
+      },
+      // Pairing mode auto-seeds commands.ownerAllowFrom on first approve;
+      // allowlist mode does not, so set it explicitly.
+      commands: {
+        ownerAllowFrom: ["tg:${TELEGRAM_OWNER_ID}"],
+      },
+      models: {
+        mode: "merge",
+        providers: {
+          "ollama-local": {
+            baseUrl: "http://ollama.ollama:11434/v1",
+            api: "openai-completions",
+            models: [
+              {
+                id: "gemma4:e4b",
+                name: "Gemma 4 E4B",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 8192,
+                maxTokens: 4096,
+              },
+              {
+                id: "qwen3-coder-next:latest",
+                name: "Qwen 3 Coder (Next)",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 32768,
+                maxTokens: 8192,
+              },
+            ],
+          },
+        },
+      },
+      agents: {
+        defaults: {
+          model: {
+            primary: "ollama-local/gemma4:e4b",
+          },
+        },
+      },
+    }
