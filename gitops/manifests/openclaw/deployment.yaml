@@ -19,6 +19,17 @@ spec:
         app.kubernetes.io/name: openclaw
     spec:
       runtimeClassName: nvidia
+      initContainers:
+        # Default gateway bind mode is loopback, which prevents the in-cluster
+        # Service (and the Tailscale Ingress proxy) from reaching the gateway.
+        # Persist gateway.bind=lan in the config PVC before the gateway starts.
+        - name: configure-bind
+          image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
+          imagePullPolicy: IfNotPresent
+          command: ["openclaw", "config", "set", "gateway.bind", "lan"]
+          volumeMounts:
+            - name: config
+              mountPath: /home/node/.openclaw
       containers:
         - name: openclaw
           image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
