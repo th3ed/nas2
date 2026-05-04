@@ -27,6 +27,11 @@ data:
             userHeader: "Tailscale-User-Login",
           },
         },
+        // The Control UI opens a WebSocket back to the gateway and rejects
+        // unknown Origin values; allow the tailnet hostname.
+        controlUi: {
+          allowedOrigins: ["https://openclaw.taile9c9c.ts.net"],
+        },
       },
       channels: {
         telegram: {
