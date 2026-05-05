@@ -30,6 +30,24 @@ grafana:
       type: loki
       url: http://loki-gateway.monitoring.svc.cluster.local
       access: proxy
+  # Grafana fetches these dashboard JSONs from grafana.com once at startup
+  # (cluster has internet egress) and provisions them into the default folder.
+  # Pin revisions so an upstream republish can't silently change panels.
+  dashboards:
+    default:
+      nvidia-dcgm:
+        # NVIDIA DCGM Exporter Dashboard — GPU utilization, memory, power,
+        # SM activity, temp, throttling. Pairs with the dcgm-exporter
+        # ServiceMonitor enabled in the gpu-operator chart values.
+        gnetId: 12239
+        revision: 2
+        datasource: Prometheus
+      loki-logs:
+        # Loki / Promtail / Logs — log rate, errors, top-volume namespaces.
+        # Useful for spotting log-pipeline regressions and noisy workloads.
+        gnetId: 13407
+        revision: 1
+        datasource: Prometheus
   service:
     type: ClusterIP
 
