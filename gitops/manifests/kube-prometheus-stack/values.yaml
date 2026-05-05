@@ -6,6 +6,18 @@ grafana:
     existingSecret: grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  # The tailnet IS the auth boundary — Grafana is exposed only via the Tailscale
+  # Operator's Ingress (grafana.taile9c9c.ts.net). Drop the login form and grant
+  # Admin to anonymous so the in-network experience matches openclaw/ollama.
+  # Admin credentials in the existingSecret remain as an emergency fallback.
+  grafana.ini:
+    auth:
+      disable_login_form: true
+    auth.anonymous:
+      enabled: true
+      org_role: Admin
+    users:
+      allow_sign_up: false
   defaultDashboardsEnabled: true
   sidecar:
     dashboards:
