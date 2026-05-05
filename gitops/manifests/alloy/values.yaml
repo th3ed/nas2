@@ -45,6 +45,14 @@ alloy:
         forward_to = [loki.write.local.receiver]
       }
 
+      // Ship API-server-level events (pod scheduling, OOMKills, image-pull
+      // backoffs, CrashLoopBackOff transitions) into Loki alongside pod logs.
+      // Invaluable for after-the-fact deploy postmortems where the failing
+      // pod's stdout has already rolled out of memory.
+      loki.source.kubernetes_events "events" {
+        forward_to = [loki.write.local.receiver]
+      }
+
       loki.write "local" {
         endpoint {
           url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
@@ -54,3 +62,31 @@ alloy:
   mounts:
     varlog: true
     dockercontainers: true
+
+# Override the chart's default RBAC rules. Chart 0.10.1's defaults grant
+# events:get only, but loki.source.kubernetes_events needs list+watch to
+# subscribe to the event stream. The other entries reproduce the chart
+# defaults so we don't drop any existing permission alloy needs.
+rbac:
+  create: true
+  rules:
+    - apiGroups: ["", "discovery.k8s.io", "networking.k8s.io"]
+      resources: ["endpoints", "endpointslices", "ingresses", "nodes", "nodes/proxy", "nodes/metrics", "pods", "services"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["pods", "pods/log", "namespaces"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["monitoring.grafana.com"]
+      resources: ["podlogs"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["monitoring.coreos.com"]
+      resources: ["prometheusrules"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["monitoring.coreos.com"]
+      resources: ["podmonitors", "servicemonitors", "probes"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["events"]
+      verbs: ["get", "list", "watch"]
+    - nonResourceURLs: ["/metrics"]
+      verbs: ["get"]
