@@ -1,0 +1,22 @@
+---
+# Single port: the proxy and the /metrics endpoint share the listener
+# (NorskHelsenett ollama-metrics design). OpenClaw uses
+# http://ollama-metrics.ollama:8080/v1 as its baseUrl; Prometheus scrapes
+# the same endpoint at /metrics via the ServiceMonitor.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-metrics
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama-metrics
+    app.kubernetes.io/component: exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ollama-metrics
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

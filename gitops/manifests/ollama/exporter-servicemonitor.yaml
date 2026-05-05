@@ -1,0 +1,19 @@
+---
+# Auto-discovered by the kube-prometheus-stack Prometheus
+# (serviceMonitorSelectorNilUsesHelmValues: false in
+# kube-prometheus-stack/values.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ollama-metrics
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama-metrics
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama-metrics
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

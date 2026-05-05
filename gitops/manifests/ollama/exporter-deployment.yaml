@@ -1,0 +1,60 @@
+---
+# Transparent proxy that sits in front of ollama and exposes Prometheus metrics:
+# prompt-tokens-total, generated-tokens-total, request-duration-seconds,
+# time-per-token, loaded-models-count, model-loaded, model-ram-mb. OpenClaw
+# is pointed at this Service instead of ollama directly so every chat
+# request is observed.
+#
+# The proxy itself is lightweight (single small Go binary) so the extra
+# in-cluster hop is negligible compared to LLM inference time.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-metrics
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama-metrics
+    app.kubernetes.io/component: exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama-metrics
+        app.kubernetes.io/component: exporter
+    spec:
+      containers:
+        - name: ollama-metrics
+          image: ghcr.io/norskhelsenett/ollama-metrics:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OLLAMA_HOST
+              value: "http://ollama.ollama.svc.cluster.local:11434"
+            - name: PORT
+              value: "8080"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
