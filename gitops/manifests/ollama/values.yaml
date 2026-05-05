@@ -32,8 +32,16 @@ service:
   port: 11434
 
 extraEnv:
-  - name: OLLAMA_NUM_CTX
+  # OLLAMA_CONTEXT_LENGTH (not OLLAMA_NUM_CTX) is the recognized server-side env
+  # var in ollama >=0.6. Without this set correctly, ollama loads every model with
+  # the 4096-token default and silently truncates longer prompts — which is what
+  # was happening to OpenClaw's 17K-token agent prompts.
+  - name: OLLAMA_CONTEXT_LENGTH
     value: "32768"
+  # Keep gemma4 (and qwen3-coder) resident across idle gaps so a fresh chat turn
+  # doesn't pay a 5-second cold-load. Default keep_alive is 5m.
+  - name: OLLAMA_KEEP_ALIVE
+    value: "24h"
 
 # Single-node now; spread across nodes in the future when multi-node arrives.
 replicaCount: 1
