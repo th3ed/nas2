@@ -20,13 +20,19 @@ Invoke this skill whenever the user:
 
 Always run from the repo root.
 
-Broad sweep (default — use this unless the user named one service):
+**Ambient / routine check** — use this by default (~15 lines, one status per component):
 ```bash
-./.claude/skills/nas2-diag/scripts/diag.sh
+./.claude/skills/nas2-diag/scripts/diag.sh --summary
 ```
 
-Targeted:
+**Targeted summary** (one service, still compact):
 ```bash
+./.claude/skills/nas2-diag/scripts/diag.sh --summary --service ollama
+```
+
+**Full transcript** — use only when actively debugging a specific failure:
+```bash
+./.claude/skills/nas2-diag/scripts/diag.sh
 ./.claude/skills/nas2-diag/scripts/diag.sh --service ollama
 ./.claude/skills/nas2-diag/scripts/diag.sh --service openclaw
 ./.claude/skills/nas2-diag/scripts/diag.sh --service tailscale
@@ -34,7 +40,7 @@ Targeted:
 ./.claude/skills/nas2-diag/scripts/diag.sh --service gpu
 ```
 
-Selection rule: if the user named exactly one of those services, pass `--service <name>`. Otherwise run with no args.
+Selection rule: default to `--summary` for any ambient or post-deploy check. Only escalate to full transcript when the summary FAIL/WARN lines are insufficient to identify root cause.
 
 ## How to interpret the output
 
@@ -54,7 +60,7 @@ Sections are delimited with `===== <name> =====`.
 ## What to report back
 
 1. **Headline:** one-line verdict (healthy / degraded / broken) and which service is at fault.
-2. **Evidence:** quote 1–3 lines from the transcript that justify the verdict.
+2. **Evidence:** in summary mode, quote the FAIL/WARN lines directly. In full-transcript mode, quote 1–3 lines from the relevant section.
 3. **Next step:** suggest read-only follow-ups only (e.g. "re-run `make apply-tags TAGS=ollama`", "inspect `group_vars/all/main.yml`"). Do not run remediation from this skill.
 
 ## Constraints

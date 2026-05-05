@@ -67,7 +67,56 @@ Running a single role uses tags; the playbook tags every role with its own name 
 
 ## Diagnostics
 
-A read-only `nas2-diag` skill (`.claude/skills/nas2-diag/`) wraps an SSH-based health sweep. Prefer it over ad-hoc `ssh` + `kubectl` invocations when the user asks to check, validate, or debug nas2 — it has its own conventions for verdict + evidence + next-step reporting and is constrained to read-only operations.
+A read-only `nas2-diag` skill (`.claude/skills/nas2-diag/`) wraps an SSH-based health sweep. Prefer it over ad-hoc `ssh` + `kubectl` invocations.
+
+- **Ambient / session-start check:** `./.claude/skills/nas2-diag/scripts/diag.sh --summary` — ~15 lines, one status per component (PASS/WARN/FAIL). Run this at the start of any session before diagnosing a problem, and after any `make apply` or deploy to confirm clean bring-up.
+- **Active debugging:** run without flags or with `--service <name>` for full transcript.
+
+Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic investigation.
+
+## Workflow protocol
+
+### Debug imperatively, fix declaratively
+
+kubectl, SSH, and nas2-diag are investigation tools only. Once a fix is identified, it must go into `gitops/` and be pushed to git — Argo CD's automated sync applies it to the cluster within ~3 minutes. Never leave an imperative `kubectl apply/patch/delete` as the permanent fix.
+
+Workflow for every fix or new feature:
+1. Run `nas2-diag --summary` to establish baseline state.
+2. Investigate with kubectl/SSH as needed (read-only).
+3. Implement the fix as a declarative change under `gitops/`.
+4. Commit and push to `main`.
+5. Verify with `nas2-diag --summary` or `make argo-status`.
+
+### Adding a new application
+
+1. `gitops/apps/<app>.yaml` — copy `gitops/apps/ollama.yaml` as the multi-source Helm template (or `gitops/apps/openclaw.yaml` for plain manifests). Set sync-wave to `20` unless the app has infrastructure dependencies.
+2. `gitops/manifests/<app>/` — at minimum:
+   - `values.yaml` (Helm apps)
+   - `tailscale-ingress.yaml` — copy `gitops/manifests/ollama/tailscale-ingress.yaml`, update namespace, service name, port, and TLS hostname (`<name>.taile9c9c.ts.net`)
+3. Runtime secrets — add `bitwarden-secret.yaml` (copy `gitops/manifests/openclaw/bitwarden-secret.yaml`). **Stop and ask the user for the Bitwarden organization ID and secret IDs before writing this file.** Never guess or invent them.
+4. Commit `gitops/apps/<app>.yaml` and all `gitops/manifests/<app>/` files together.
+
+### Secret handling rules
+
+- **Bitwarden Secrets Manager** is the correct store for all runtime app secrets. Never put secret values in manifests, values files, or CLAUDE.md.
+- **Need a new secret?** Stop and ask: "I need a BitwardenSecret for `<app>`. Can you provide the Bitwarden organization ID and the secret IDs for the values you want mapped?" Wait for the user to supply them.
+- **Ansible-vault secrets** are strictly for bootstrap credentials (Tailscale auth key, Bitwarden SM token, OAuth creds, Grafana admin password). Do not add new vault keys for runtime app secrets.
+
+## Canonical patterns
+
+Copy these files — do not invent alternatives.
+
+| Pattern | Source file |
+|---|---|
+| Argo Application (Helm, multi-source) | `gitops/apps/ollama.yaml` |
+| Argo Application (plain manifests) | `gitops/apps/openclaw.yaml` |
+| Tailscale Ingress | `gitops/manifests/ollama/tailscale-ingress.yaml` |
+| BitwardenSecret CRD | `gitops/manifests/openclaw/bitwarden-secret.yaml` |
+| ignoreDifferences block | `gitops/apps/metallb.yaml` |
+
+Tailnet domain: `taile9c9c.ts.net` (in `group_vars/all/main.yml`).
+GPU workloads: require `runtimeClassName: nvidia` in the PodSpec — see `gitops/manifests/gpu-operator/runtimeclass.yaml`.
+Health checks: add liveness/readiness probes in Deployment manifests where the upstream chart supports it.
 
 ## Gotchas worth remembering
 

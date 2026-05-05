@@ -3,10 +3,15 @@
 
 set -uo pipefail
 
-SERVICE="${1:-}"
-if [[ "$SERVICE" == "--service" ]]; then
-  SERVICE="${2:-}"
-fi
+SUMMARY=false
+SERVICE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --summary) SUMMARY=true; shift ;;
+    --service) SERVICE="${2:-}"; shift 2 ;;
+    *) echo "unknown arg '$1'. valid flags: --summary, --service <name>" >&2; exit 2 ;;
+  esac
+done
 
 case "$SERVICE" in
   ""|all|ollama|openclaw|tailscale|docker|gpu|firewall|k3s|argocd|grafana|loki) ;;
@@ -112,6 +117,139 @@ hr "done"
 REMOTE
 )
 
+SUMMARY_SCRIPT=$(cat <<'SUMMARY_EOF'
+set -uo pipefail
+FILTER="${1:-}"
+_exit=0
+
+_result() {
+  local status="$1" name="$2" detail="$3"
+  printf '%-4s  %-16s  %s\n' "$status" "$name" "$detail"
+  [[ "$status" == "FAIL" ]] && _exit=1
+}
+_want()      { [[ -z "$FILTER" || "$FILTER" == "$1" || "$FILTER" == "all" ]]; }
+_wants_any() { local c; for c in "$@"; do _want "$c" && return 0; done; return 1; }
+
+# systemd services
+for _key in tailscale docker k3s; do
+  _wants_any "$_key" || continue
+  _unit="$_key"
+  [[ "$_key" == "tailscale" ]] && _unit="tailscaled"
+  _state=$(systemctl is-active "$_unit" 2>/dev/null || echo "unknown")
+  if [[ "$_state" == "active" ]]; then
+    _result PASS "$_key" "$_state"
+  else
+    _result FAIL "$_key" "$_state"
+  fi
+done
+
+# GPU
+if _wants_any gpu ollama openclaw || [[ -z "$FILTER" ]]; then
+  if _gpu=$(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -1); then
+    _result PASS "nvidia-smi" "$_gpu"
+  else
+    _result FAIL "nvidia-smi" "unavailable"
+  fi
+fi
+
+# Kubernetes
+if command -v kubectl >/dev/null 2>&1; then
+  export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
+
+  if _wants_any argocd || [[ -z "$FILTER" ]]; then
+    _apps=$(kubectl get applications -n argocd --no-headers 2>/dev/null || echo "")
+    _total=$(echo "$_apps" | grep -c . 2>/dev/null || echo 0)
+    _bad=$(echo "$_apps" | grep -cE 'OutOfSync|Degraded|Unknown' 2>/dev/null || echo 0)
+    if [[ "$_total" -eq 0 ]]; then
+      _result WARN "argocd apps" "no apps found"
+    elif [[ "$_bad" -eq 0 ]]; then
+      _result PASS "argocd apps" "${_total}/${_total} Synced+Healthy"
+    else
+      _result FAIL "argocd apps" "${_bad}/${_total} not Synced/Healthy"
+    fi
+  fi
+
+  # All failing pods — only in unfiltered mode
+  if [[ -z "$FILTER" ]]; then
+    _failing=$(kubectl get pods -A --no-headers 2>/dev/null | grep -vE '\s+(Running|Completed|Terminating)\s+' 2>/dev/null || true)
+    if [[ -z "$_failing" ]]; then
+      _result PASS "pods" "all Running/Completed"
+    else
+      _count=$(echo "$_failing" | grep -c . || echo 1)
+      _first=$(echo "$_failing" | head -1 | awk '{print $1"/"$2" "$4}')
+      _result FAIL "pods" "${_count} failing: $_first"
+    fi
+  fi
+
+  # Per-service pod status — only when filtered to that service
+  if _wants_any ollama && [[ -n "$FILTER" ]]; then
+    _ps=$(kubectl get pods -n ollama --no-headers 2>/dev/null | head -1 || echo "")
+    if [[ -z "$_ps" ]]; then
+      _result WARN "ollama pod" "no pods"
+    elif echo "$_ps" | grep -qE 'Running|Completed'; then
+      _result PASS "ollama pod" "$(echo "$_ps" | awk '{print $2" "$3}')"
+    else
+      _result FAIL "ollama pod" "$(echo "$_ps" | awk '{print $3}')"
+    fi
+  fi
+
+  if _wants_any openclaw && [[ -n "$FILTER" ]]; then
+    _ps=$(kubectl get pods -n openclaw --no-headers 2>/dev/null | head -1 || echo "")
+    if [[ -z "$_ps" ]]; then
+      _result WARN "openclaw pod" "no pods"
+    elif echo "$_ps" | grep -qE 'Running|Completed'; then
+      _result PASS "openclaw pod" "$(echo "$_ps" | awk '{print $2" "$3}')"
+    else
+      _result FAIL "openclaw pod" "$(echo "$_ps" | awk '{print $3}')"
+    fi
+  fi
+
+  # Warning events — only in unfiltered mode
+  if [[ -z "$FILTER" ]]; then
+    _wc=$(kubectl get events -A --field-selector type=Warning --no-headers 2>/dev/null | grep -c . 2>/dev/null || echo 0)
+    if [[ "$_wc" -eq 0 ]]; then
+      _result PASS "k8s events" "0 warnings"
+    elif [[ "$_wc" -le 5 ]]; then
+      _result WARN "k8s events" "${_wc} Warning events"
+    else
+      _result FAIL "k8s events" "${_wc} Warning events"
+    fi
+  fi
+else
+  _result WARN "kubectl" "not installed"
+fi
+
+# HTTP endpoints
+if _wants_any ollama || [[ -z "$FILTER" ]]; then
+  if curl -fsSk --max-time 10 https://ollama.taile9c9c.ts.net/api/tags >/dev/null 2>&1; then
+    _result PASS "ollama http" "200"
+  else
+    _result FAIL "ollama http" "unreachable"
+  fi
+fi
+
+if _wants_any openclaw || [[ -z "$FILTER" ]]; then
+  _code=$(curl -fsSIk --max-time 10 -o /dev/null -w '%{http_code}' https://openclaw.taile9c9c.ts.net/ 2>/dev/null || echo "000")
+  if [[ "$_code" =~ ^[23] ]]; then
+    _result PASS "openclaw http" "HTTP $_code"
+  else
+    _result FAIL "openclaw http" "HTTP $_code"
+  fi
+fi
+
+if _wants_any grafana || [[ -z "$FILTER" ]]; then
+  _resp=$(curl -fsSk --max-time 10 https://grafana.taile9c9c.ts.net/api/health 2>/dev/null || echo "")
+  if echo "$_resp" | grep -q '"ok"'; then
+    _result PASS "grafana http" "$_resp"
+  else
+    _result FAIL "grafana http" "${_resp:-unreachable}"
+  fi
+fi
+
+exit "$_exit"
+SUMMARY_EOF
+)
+
 if ! ssh "${SSH_OPTS[@]}" "$SSH_HOST" true 2>/tmp/nas2-diag-ssh.err; then
   echo "===== ssh =====" >&2
   echo "FAILED to ssh to $SSH_HOST" >&2
@@ -119,4 +257,8 @@ if ! ssh "${SSH_OPTS[@]}" "$SSH_HOST" true 2>/tmp/nas2-diag-ssh.err; then
   exit 3
 fi
 
-ssh "${SSH_OPTS[@]}" "$SSH_HOST" 'bash -s -- "$1"' _ "$SERVICE" <<<"$REMOTE_SCRIPT"
+if $SUMMARY; then
+  ssh "${SSH_OPTS[@]}" "$SSH_HOST" bash -s -- "$SERVICE" <<<"$SUMMARY_SCRIPT"
+else
+  ssh "${SSH_OPTS[@]}" "$SSH_HOST" 'bash -s -- "$1"' _ "$SERVICE" <<<"$REMOTE_SCRIPT"
+fi
