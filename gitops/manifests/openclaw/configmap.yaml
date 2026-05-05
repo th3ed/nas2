@@ -56,11 +56,17 @@ data:
               {
                 id: "gemma4:e4b",
                 name: "Gemma 4 E4B",
-                reasoning: false,
+                // gemma4:e4b reports the "thinking" capability in `ollama show`.
+                // Leaving reasoning: false suppressed it during chat — direct
+                // `ollama run` answers were noticeably better than OpenClaw's.
+                reasoning: true,
                 input: ["text"],
                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 32768,
-                maxTokens: 8192,
+                // Full native window per `ollama show`. With OLLAMA_CONTEXT_LENGTH
+                // raised to match, OpenClaw stops triggering compaction every
+                // 2-3 turns.
+                contextWindow: 131072,
+                maxTokens: 16384,
               },
               {
                 id: "qwen3-coder-next:latest",

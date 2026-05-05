@@ -34,14 +34,28 @@ service:
 extraEnv:
   # OLLAMA_CONTEXT_LENGTH (not OLLAMA_NUM_CTX) is the recognized server-side env
   # var in ollama >=0.6. Without this set correctly, ollama loads every model with
-  # the 4096-token default and silently truncates longer prompts — which is what
-  # was happening to OpenClaw's 17K-token agent prompts.
+  # the 4096-token default and silently truncates longer prompts.
+  #
+  # gemma4:e4b reports `context length 131072` in `ollama show`, so use the
+  # full window. With OpenClaw's ~18K-token agent prompt floor this leaves
+  # ~110K tokens of conversation room before OpenClaw triggers compaction —
+  # at 32K we were compacting every 2-3 turns.
   - name: OLLAMA_CONTEXT_LENGTH
-    value: "32768"
+    value: "131072"
   # Keep gemma4 (and qwen3-coder) resident across idle gaps so a fresh chat turn
   # doesn't pay a 5-second cold-load. Default keep_alive is 5m.
   - name: OLLAMA_KEEP_ALIVE
     value: "24h"
+  # Flash attention is required for KV cache quantization. Setting it
+  # explicitly also forces it on for any model that doesn't auto-enable.
+  - name: OLLAMA_FLASH_ATTENTION
+    value: "true"
+  # q8_0 quantizes the KV cache from fp16 to int8, halving its memory
+  # footprint with negligible quality loss. At 128K context the KV cache
+  # would otherwise grow ~4x vs 32K (224 MiB → ~896 MiB on GPU); q8_0
+  # keeps it around the 32K-fp16 size and frees VRAM for compute graph.
+  - name: OLLAMA_KV_CACHE_TYPE
+    value: "q8_0"
 
 # Single-node now; spread across nodes in the future when multi-node arrives.
 replicaCount: 1
