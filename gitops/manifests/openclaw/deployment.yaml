@@ -20,6 +20,14 @@ spec:
     spec:
       runtimeClassName: nvidia
       initContainers:
+        # Seed openclaw's auth-profiles.json declaratively. Ollama needs no API
+        # key but openclaw still requires a profile entry whose `provider`
+        # matches the model provider id; absent it, model invocation fails with
+        # `No API key found for provider "ollama-local"`. Schema source: the
+        # AuthProfileStore reader in /app/dist/profiles-BvYdgqiN.js (v1 store
+        # with `profiles[<id>]={type,provider,key}`). Rewritten on every pod
+        # start — the file is treated as part of the declarative config, like
+        # openclaw.json next to it.
         - name: seed-auth
           image: busybox:1.36
           command:
@@ -27,11 +35,10 @@ spec:
             - -c
             - |
               dir=/home/node/.openclaw/agents/main/agent
-              file=$dir/auth-profiles.json
               mkdir -p "$dir"
-              if [ ! -f "$file" ]; then
-                printf '{"ollama-local":{"apiKey":"ollama"}}\n' > "$file"
-              fi
+              cat > "$dir/auth-profiles.json" <<'JSON'
+              {"version":1,"profiles":{"ollama-local:default":{"type":"api_key","provider":"ollama-local","key":"ollama"}}}
+              JSON
           volumeMounts:
             - name: config
               mountPath: /home/node/.openclaw
