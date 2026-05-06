@@ -56,10 +56,12 @@ data:
               {
                 id: "gemma4:e4b",
                 name: "Gemma 4 E4B",
-                // gemma4:e4b reports the "thinking" capability in `ollama show`.
-                // Leaving reasoning: false suppressed it during chat — direct
-                // `ollama run` answers were noticeably better than OpenClaw's.
-                reasoning: true,
+                // reasoning: true broke tool calls. Ollama's OpenAI-compatible
+                // streaming sends ~100 delta.reasoning chunks before the final
+                // delta.tool_calls chunk; openclaw's reasoning-mode handler
+                // misses the tool_calls. Reverting to false restores tools.
+                // Re-enable when openclaw fixes reasoning + tool call streaming.
+                reasoning: false,
                 input: ["text"],
                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
                 // Full native window per `ollama show`. With OLLAMA_CONTEXT_LENGTH
