@@ -87,6 +87,12 @@ Workflow for every fix or new feature:
 4. Commit and push to `main`.
 5. Verify with `nas2-diag --summary` or `make argo-status`.
 
+### Git is pre-authorized for routine changes
+
+`git add`, `git commit`, and `git push origin main` are pre-authorized for this repo — proceed without asking when the change is a routine edit under `gitops/`, `group_vars/`, `roles/`, `playbook.yml`, or `CLAUDE.md`. Pausing to ask just slows down the declarative workflow above (step 4 is the normal path).
+
+Still ask first before: force-pushing, rewriting history (`git reset --hard` on `main`, `git rebase -i`, `git commit --amend` on already-pushed commits), deleting branches, committing files outside the routine paths above (e.g. `.vault_pass`, anything in `.claude/`, secrets, large binaries), or any operation that could destroy work.
+
 ### Adding a new application
 
 1. `gitops/apps/<app>.yaml` — copy `gitops/apps/ollama.yaml` as the multi-source Helm template (or `gitops/apps/openclaw.yaml` for plain manifests). Set sync-wave to `20` unless the app has infrastructure dependencies.
