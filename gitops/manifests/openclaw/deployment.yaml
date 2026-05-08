@@ -44,7 +44,7 @@ spec:
               mountPath: /home/node/.openclaw
       containers:
         - name: openclaw
-          image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
+          image: ghcr.io/openclaw/openclaw:2026.5.7-slim
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

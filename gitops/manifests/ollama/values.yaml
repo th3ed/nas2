@@ -3,7 +3,7 @@ runtimeClassName: nvidia
 
 image:
   repository: ollama/ollama
-  tag: "0.21.2"
+  tag: "0.23.2"
   pullPolicy: IfNotPresent
 
 ollama:
