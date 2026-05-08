@@ -47,7 +47,11 @@ data:
         ownerAllowFrom: ["tg:${TELEGRAM_OWNER_ID}"],
       },
       models: {
-        mode: "merge",
+        // "replace" hides openclaw's built-in provider catalog (Anthropic,
+        // OpenAI, Google, etc.) so the model picker only shows providers
+        // declared below — i.e. just ollama-local. "merge" was confusing the
+        // UX by surfacing dozens of unconfigured cloud models.
+        mode: "replace",
         providers: {
           "ollama-local": {
             baseUrl: "http://ollama.ollama:11434/v1",
