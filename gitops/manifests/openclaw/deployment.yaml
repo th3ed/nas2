@@ -44,7 +44,17 @@ spec:
               mountPath: /home/node/.openclaw
       containers:
         - name: openclaw
-          image: ghcr.io/openclaw/openclaw:2026.5.7-slim
+          # Pinned to 2026.4.25-beta.4-slim, NOT 2026.5.x, due to a strict
+          # scope-enforcement regression in 2026.5.x for trusted-proxy +
+          # WebSocket sessions: Control UI WS connections authenticate but
+          # arrive with zero operator scopes, so every RPC fails with
+          # `missing scope: operator.read`. trusted-proxy mode has no
+          # config knob to grant default scopes (only password/token auth
+          # does). Re-attempt the bump when openclaw releases a build that
+          # either (a) grants default operator scopes to trusted-proxy WS
+          # sessions, or (b) adds a `gateway.auth.trustedProxy.scopes`
+          # config field. See openclaw docs/gateway/operator-scopes.md.
+          image: ghcr.io/openclaw/openclaw:2026.4.25-beta.4-slim
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
