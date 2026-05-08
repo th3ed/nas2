@@ -15,7 +15,7 @@ ollama:
     pull:
       - qwen3-coder-next:latest
       - gemma4:e4b
-      - gemma3:12b-it-qat
+      - qwen3:4b-instruct-2507-q8_0
     run: []
 
 persistentVolume:
