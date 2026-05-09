@@ -76,6 +76,10 @@ Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic 
 
 ## Workflow protocol
 
+### Debugging discipline
+
+Before changing any config, state your hypothesis for the root cause and one piece of evidence supporting it. If your first fix doesn't resolve the issue, stop and re-diagnose from scratch instead of trying another fix.
+
 ### Debug imperatively, fix declaratively
 
 kubectl, SSH, and nas2-diag are investigation tools only. Once a fix is identified, it must go into `gitops/` and be pushed to git — Argo CD's automated sync applies it to the cluster within ~3 minutes. Never leave an imperative `kubectl apply/patch/delete` as the permanent fix.
