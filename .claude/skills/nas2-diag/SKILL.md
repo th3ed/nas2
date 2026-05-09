@@ -20,17 +20,13 @@ Invoke this skill whenever the user:
 
 Always run from the repo root.
 
-**Ambient / routine check** — use this by default (~15 lines, one status per component):
+**Ambient / post-deploy check** — use `tests/run-all.sh` (or `--retry 3` after a deploy):
 ```bash
-./.claude/skills/nas2-diag/scripts/diag.sh --summary
+tests/run-all.sh
+tests/run-all.sh --retry 3
 ```
 
-**Targeted summary** (one service, still compact):
-```bash
-./.claude/skills/nas2-diag/scripts/diag.sh --summary --service ollama
-```
-
-**Full transcript** — use only when actively debugging a specific failure:
+**Active debugging** — full transcript for the affected service:
 ```bash
 ./.claude/skills/nas2-diag/scripts/diag.sh
 ./.claude/skills/nas2-diag/scripts/diag.sh --service ollama
@@ -40,7 +36,7 @@ Always run from the repo root.
 ./.claude/skills/nas2-diag/scripts/diag.sh --service gpu
 ```
 
-Selection rule: default to `--summary` for any ambient or post-deploy check. Only escalate to full transcript when the summary FAIL/WARN lines are insufficient to identify root cause.
+Selection rule: use `tests/run-all.sh` for pass/fail status. Escalate to `diag.sh --service <name>` only when you need logs or detailed output to identify root cause.
 
 ## How to interpret the output
 

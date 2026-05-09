@@ -67,10 +67,8 @@ Running a single role uses tags; the playbook tags every role with its own name 
 
 ## Diagnostics
 
-A read-only `nas2-diag` skill (`.claude/skills/nas2-diag/`) wraps an SSH-based health sweep. Prefer it over ad-hoc `ssh` + `kubectl` invocations.
-
-- **Ambient / session-start check:** `./.claude/skills/nas2-diag/scripts/diag.sh --summary` — ~15 lines, one status per component (PASS/WARN/FAIL). Run this at the start of any session before diagnosing a problem, and after any `make apply` or deploy to confirm clean bring-up.
-- **Active debugging:** run without flags or with `--service <name>` for full transcript.
+- **Ambient / session-start check:** `tests/run-all.sh` — one PASS/FAIL line per invariant. Run at the start of any session and after any `make apply` or deploy. Use `tests/run-all.sh --retry 3` after a deploy to allow Argo sync time.
+- **Active debugging:** `./.claude/skills/nas2-diag/scripts/diag.sh` or `--service <name>` for a full SSH transcript. Prefer it over ad-hoc `ssh` + `kubectl` invocations.
 
 Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic investigation.
 
@@ -78,7 +76,7 @@ Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic 
 
 ### Debugging discipline
 
-Before changing any config, state your hypothesis for the root cause and one piece of evidence supporting it. If your first fix doesn't resolve the issue, stop and re-diagnose from scratch instead of trying another fix.
+Before changing any config, state your hypothesis for the root cause and one piece of evidence supporting it. If your first fix doesn't resolve the issue, stop and re-diagnose from scratch instead of trying another fix. (Test failures due to cluster-sync timing are handled automatically by `tests/run-all.sh --retry 3` with 30 s backoff — those retries are not "trying the same fix again.")
 
 ### Debug imperatively, fix declaratively
 
@@ -96,6 +94,23 @@ Workflow for every fix or new feature:
 `git add`, `git commit`, and `git push origin main` are pre-authorized for this repo — proceed without asking when the change is a routine edit under `gitops/`, `group_vars/`, `roles/`, `playbook.yml`, or `CLAUDE.md`. Pausing to ask just slows down the declarative workflow above (step 4 is the normal path).
 
 Still ask first before: force-pushing, rewriting history (`git reset --hard` on `main`, `git rebase -i`, `git commit --amend` on already-pushed commits), deleting branches, committing files outside the routine paths above (e.g. `.vault_pass`, anything in `.claude/`, secrets, large binaries), or any operation that could destroy work.
+
+### TDD for cluster changes
+
+Use `/tdd-infra <request>` for any change that touches cluster behavior:
+
+1. Write or update the relevant `tests/test-<name>.sh` — run it to confirm it fails before implementing.
+2. Implement the change in `gitops/`.
+3. Run `tests/run-all.sh --retry 3`; the runner waits 30 s between retries to let Argo sync.
+4. Commit and push only when all tests pass.
+5. If tests still fail after 3 retries: form a **new hypothesis** — do not re-apply the same fix.
+
+### Keeping tests current
+
+`tests/` is the invariant suite for this cluster. Keep it in sync:
+- **New feature** in `gitops/` → add a test for the invariant it satisfies, in the same commit.
+- **New failure pattern** found during debugging → add a regression test before closing the issue.
+- **Feature removed** → delete its test.
 
 ### Adding a new application
 
