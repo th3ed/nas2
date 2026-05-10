@@ -12,3 +12,4 @@ bitwarden_namespaces:
   - ollama
   - openclaw
   - monitoring
+  - litellm
