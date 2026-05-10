@@ -51,6 +51,6 @@
   changed_when: true
   when:
     - tailscale_advertise_routes | length > 0
-    - (ts_status_for_routes.stdout | default('{}') | from_json).get('Self', {}).get('AdvertisedRoutes') | default([]) | sort
+    - (ts_status_for_routes.stdout | default('{}') | from_json).get('Self', {}).get('AdvertisedRoutes') | default([], true) | sort
       != tailscale_advertise_routes | sort
 
