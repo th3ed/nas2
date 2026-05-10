@@ -101,6 +101,15 @@ data:
           model: {
             primary: "litellm/gemma4:e4b",
           },
+          // Allowlist: only these keys appear in the UI model picker.
+          // models.mode="replace" restricts CLI but has a known bug where
+          // the Control UI dropdown still shows the full built-in catalog.
+          // agents.defaults.models is the workaround that actually gates the UI.
+          models: {
+            "litellm/gemma4:e4b": {},
+            "litellm/qwen3-coder-next:latest": {},
+            "litellm/qwen3:4b-instruct-2507-q8_0": {},
+          },
         },
       },
     }
