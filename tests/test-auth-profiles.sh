@@ -18,7 +18,7 @@ if [[ -z "$pod" ]]; then
     echo "NO_POD"
     exit 1
 fi
-kubectl exec -n openclaw "$pod" -- \
+kubectl exec -n openclaw "$pod" -c openclaw -- \
     cat /home/node/.openclaw/agents/main/agent/auth-profiles.json 2>&1
 REMOTE
 )
@@ -33,7 +33,7 @@ json=$(ssh_script <<<"$remote") || {
 }
 
 errors=()
-echo "$json" | grep -q '"version":1'              || errors+=("missing version:1")
+echo "$json" | grep -qE '"version"\s*:\s*1'       || errors+=("missing version:1")
 echo "$json" | grep -q '"profiles"'               || errors+=("missing profiles key")
 echo "$json" | grep -q '"ollama-local:default"'   || errors+=("missing ollama-local:default entry")
 
