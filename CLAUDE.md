@@ -67,8 +67,9 @@ Running a single role uses tags; the playbook tags every role with its own name 
 
 ## Diagnostics
 
+- **Kubernetes MCP server:** Use `mcp__kubernetes__*` tools (`kubectl_get`, `kubectl_describe`, `kubectl_logs`, `kubectl_context`, etc.) for direct in-session cluster queries — no SSH required. This is the preferred method for any targeted kubectl lookup. Context is `nas2`.
 - **Ambient / session-start check:** `tests/run-all.sh` — one PASS/FAIL line per invariant. Run at the start of any session and after any `make apply` or deploy. Use `tests/run-all.sh --retry 3` after a deploy to allow Argo sync time.
-- **Active debugging:** `./.claude/skills/nas2-diag/scripts/diag.sh` or `--service <name>` for a full SSH transcript. Prefer it over ad-hoc `ssh` + `kubectl` invocations.
+- **Active debugging:** `./.claude/skills/nas2-diag/scripts/diag.sh` or `--service <name>` for a full SSH transcript. Use for host-level checks (systemd, GPU, node state) or when the MCP server is unavailable.
 
 Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic investigation.
 
@@ -84,10 +85,10 @@ kubectl, SSH, and nas2-diag are investigation tools only. Once a fix is identifi
 
 Workflow for every fix or new feature:
 1. Run `nas2-diag --summary` to establish baseline state.
-2. Investigate with kubectl/SSH as needed (read-only).
+2. Investigate with the Kubernetes MCP tools (`mcp__kubernetes__kubectl_get`, `kubectl_describe`, `kubectl_logs`, etc.) for cluster-level queries; use SSH/nas2-diag for host-level checks. Read-only only.
 3. Implement the fix as a declarative change under `gitops/`.
 4. Commit and push to `main`.
-5. Verify with `nas2-diag --summary` or `make argo-status`.
+5. Verify with the Kubernetes MCP tools, `nas2-diag --summary`, or `make argo-status`.
 
 ### Git is pre-authorized for routine changes
 
