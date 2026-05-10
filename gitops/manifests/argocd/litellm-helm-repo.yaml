@@ -1,0 +1,17 @@
+---
+# Registers ghcr.io/berriai as an OCI-enabled Helm repository so that the
+# litellm Argo CD Application can pull oci://ghcr.io/berriai/litellm-helm.
+# Without enableOCI, argocd-repo-server falls back to `helm pull --repo <url>`
+# (HTTP syntax), which fails for OCI registries.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: litellm-helm-oci
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: litellm-helm
+  url: ghcr.io/berriai
+  type: helm
+  enableOCI: "true"

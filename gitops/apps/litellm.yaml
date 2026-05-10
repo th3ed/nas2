@@ -11,7 +11,7 @@ metadata:
 spec:
   project: default
   sources:
-    - repoURL: oci://ghcr.io/berriai/litellm-helm
+    - repoURL: ghcr.io/berriai
       chart: litellm-helm
       targetRevision: 1.82.3
       helm:
