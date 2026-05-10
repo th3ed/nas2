@@ -8,6 +8,12 @@ docker_apt_release: noble
 
 tailscale_apt_release: noble
 tailscale_authkey: "{{ vault_tailscale_authkey }}"
+# Routes advertised to the tailnet — lets laptop reach pod/service CIDRs directly.
+# After applying, approve at login.tailscale.com/admin/machines and run
+# `tailscale up --accept-routes` on the client.
+tailscale_advertise_routes:
+  - "10.42.0.0/16"
+  - "10.43.0.0/16"
 
 cuda_version: "12.6.0"
 cuda_image: "nvidia/cuda:{{ cuda_version }}-cudnn-devel-ubuntu24.04"
@@ -37,6 +43,8 @@ tailnet_domain: taile9c9c.ts.net
 
 # k3s
 k3s_version: "v1.32.1+k3s1"
+k3s_tls_san:
+  - "nas2.taile9c9c.ts.net"
 
 # Argo CD / GitOps
 gitops_repo_url: "https://github.com/th3ed/nas2.git"

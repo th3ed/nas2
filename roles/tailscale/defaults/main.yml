@@ -1,0 +1,6 @@
+---
+tailscale_apt_release: noble
+
+# Routes to advertise on the Tailscale network. After applying, approve them in
+# the Tailscale admin console and run `tailscale up --accept-routes` on the client.
+tailscale_advertise_routes: []

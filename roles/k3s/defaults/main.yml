@@ -9,3 +9,7 @@ k3s_server_args:
   - "--write-kubeconfig-mode=0644"
 
 k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+
+# Additional TLS SANs for the k3s API server cert. Changing this list causes
+# k3s to regenerate its serving cert on next restart.
+k3s_tls_san: []

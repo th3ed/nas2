@@ -5,6 +5,23 @@
   changed_when: false
   failed_when: false
 
+- name: Ensure /etc/rancher/k3s config directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write k3s config file
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
 - name: Download k3s install script
   ansible.builtin.get_url:
     url: "{{ k3s_install_script_url }}"
@@ -21,6 +38,9 @@
   register: k3s_install
   changed_when: "'No change detected' not in k3s_install.stdout"
   when: k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout
+
+- name: Flush handlers to restart k3s before readiness checks
+  ansible.builtin.meta: flush_handlers
 
 - name: Wait for k3s API to be ready
   ansible.builtin.wait_for:

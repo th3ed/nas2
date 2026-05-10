@@ -1,0 +1,7 @@
+# /etc/rancher/k3s/config.yaml — managed by Ansible; do not edit by hand.
+{% if k3s_tls_san %}
+tls-san:
+{% for san in k3s_tls_san %}
+  - "{{ san }}"
+{% endfor %}
+{% endif %}

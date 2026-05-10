@@ -38,3 +38,19 @@
   no_log: true
   when: (ts_status_raw.stdout | default('{}') | from_json).get('BackendState', '') != 'Running'
 
+- name: Check current advertised routes
+  ansible.builtin.command: tailscale status --json
+  register: ts_status_for_routes
+  changed_when: false
+  failed_when: false
+  when: tailscale_advertise_routes | length > 0
+
+- name: Advertise routes via Tailscale
+  ansible.builtin.command:
+    cmd: "tailscale set --advertise-routes={{ tailscale_advertise_routes | join(',') }}"
+  changed_when: true
+  when:
+    - tailscale_advertise_routes | length > 0
+    - (ts_status_for_routes.stdout | default('{}') | from_json).get('Self', {}).get('AdvertisedRoutes') | default([]) | sort
+      != tailscale_advertise_routes | sort
+
