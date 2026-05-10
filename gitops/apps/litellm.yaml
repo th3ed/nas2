@@ -1,0 +1,36 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "25"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: oci://ghcr.io/berriai
+      chart: litellm-helm
+      targetRevision: 1.82.3
+      helm:
+        releaseName: litellm
+        valueFiles:
+          - $values/gitops/manifests/litellm/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/litellm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: litellm
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

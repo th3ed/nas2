@@ -1,0 +1,30 @@
+---
+image:
+  repository: ghcr.io/berriai/litellm
+
+db:
+  deployStandalone: false
+
+migrationJob:
+  enabled: false
+
+environmentSecrets:
+  - litellm-secrets
+
+proxy_config:
+  model_list:
+    - model_name: "gemma4:e4b"
+      litellm_params:
+        model: "ollama_chat/gemma4:e4b"
+        api_base: "http://ollama.ollama:11434"
+    - model_name: "qwen3-coder-next:latest"
+      litellm_params:
+        model: "ollama_chat/qwen3-coder-next:latest"
+        api_base: "http://ollama.ollama:11434"
+    - model_name: "qwen3:4b-instruct-2507-q8_0"
+      litellm_params:
+        model: "ollama_chat/qwen3:4b-instruct-2507-q8_0"
+        api_base: "http://ollama.ollama:11434"
+  general_settings:
+    master_key: os.environ/LITELLM_MASTER_KEY
+    disable_spend_logs: true
