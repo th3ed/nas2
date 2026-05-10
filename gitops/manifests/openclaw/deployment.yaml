@@ -43,6 +43,49 @@ spec:
               cat > "$dir/auth-profiles.json" <<JSON
               {"version":1,"profiles":{"litellm:default":{"type":"api_key","provider":"litellm","key":"${LITELLM_API_KEY}"}}}
               JSON
+              cat > "$dir/models.json" <<'JSON'
+              {
+                "providers": {
+                  "litellm": {
+                    "baseUrl": "http://litellm.litellm:4000/v1",
+                    "api": "openai-completions",
+                    "apiKey": "LITELLM_API_KEY",
+                    "models": [
+                      {
+                        "id": "gemma4:e4b",
+                        "name": "Gemma 4 E4B",
+                        "reasoning": false,
+                        "input": ["text"],
+                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                        "contextWindow": 131072,
+                        "maxTokens": 16384,
+                        "api": "openai-completions"
+                      },
+                      {
+                        "id": "qwen3-coder-next:latest",
+                        "name": "Qwen 3 Coder (Next)",
+                        "reasoning": false,
+                        "input": ["text"],
+                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                        "contextWindow": 32768,
+                        "maxTokens": 8192,
+                        "api": "openai-completions"
+                      },
+                      {
+                        "id": "qwen3:4b-instruct-2507-q8_0",
+                        "name": "Qwen 3 4B Instruct (2507, Q8)",
+                        "reasoning": false,
+                        "input": ["text"],
+                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                        "contextWindow": 32768,
+                        "maxTokens": 8192,
+                        "api": "openai-completions"
+                      }
+                    ]
+                  }
+                }
+              }
+              JSON
           volumeMounts:
             - name: config
               mountPath: /home/node/.openclaw
