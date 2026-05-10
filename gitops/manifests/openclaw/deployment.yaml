@@ -20,24 +20,28 @@ spec:
     spec:
       runtimeClassName: nvidia
       initContainers:
-        # Seed openclaw's auth-profiles.json declaratively. Ollama needs no API
-        # key but openclaw still requires a profile entry whose `provider`
-        # matches the model provider id; absent it, model invocation fails with
-        # `No API key found for provider "ollama-local"`. Schema source: the
-        # AuthProfileStore reader in /app/dist/profiles-BvYdgqiN.js (v1 store
-        # with `profiles[<id>]={type,provider,key}`). Rewritten on every pod
-        # start — the file is treated as part of the declarative config, like
-        # openclaw.json next to it.
+        # Seed openclaw's auth-profiles.json declaratively. openclaw requires a
+        # profile entry whose `provider` matches the model provider id and a
+        # valid API key; absent it, model invocation fails with
+        # `No API key found for provider "litellm"`. The LITELLM_API_KEY is
+        # the LiteLLM master key from Bitwarden, injected via envFrom below.
+        # Schema source: AuthProfileStore reader in /app/dist/profiles-*.js
+        # (v1 store with `profiles[<id>]={type,provider,key}`). Rewritten on
+        # every pod start — treated as declarative config like openclaw.json.
         - name: seed-auth
           image: busybox:1.36
+          envFrom:
+            - secretRef:
+                name: openclaw-secrets
+                optional: true
           command:
             - sh
             - -c
             - |
               dir=/home/node/.openclaw/agents/main/agent
               mkdir -p "$dir"
-              cat > "$dir/auth-profiles.json" <<'JSON'
-              {"version":1,"profiles":{"ollama-local:default":{"type":"api_key","provider":"ollama-local","key":"ollama"}}}
+              cat > "$dir/auth-profiles.json" <<JSON
+              {"version":1,"profiles":{"litellm:default":{"type":"api_key","provider":"litellm","key":"${LITELLM_API_KEY}"}}}
               JSON
           volumeMounts:
             - name: config

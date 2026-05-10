@@ -53,8 +53,8 @@ data:
         // UX by surfacing dozens of unconfigured cloud models.
         mode: "replace",
         providers: {
-          "ollama-local": {
-            baseUrl: "http://ollama.ollama:11434/v1",
+          "litellm": {
+            baseUrl: "http://litellm.litellm:4000/v1",
             api: "openai-completions",
             models: [
               {
@@ -99,7 +99,7 @@ data:
       agents: {
         defaults: {
           model: {
-            primary: "ollama-local/gemma4:e4b",
+            primary: "litellm/gemma4:e4b",
           },
         },
       },
