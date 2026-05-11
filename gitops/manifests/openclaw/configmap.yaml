@@ -151,25 +151,17 @@ data:
       },
       agents: {
         defaults: {
-          // Tiered routing: lightweight roles stay on the free local model;
-          // heavier roles (transcript compaction, memory writes, vision/PDF
-          // analysis) go through cloud models for quality. Users can still
-          // override interactively via the model picker; these are only
-          // the defaults openclaw uses when no override is set.
+          // Tiered routing: lightweight conversational turns and heartbeats
+          // run on the free local model (heartbeat has no per-role model
+          // override in openclaw 2026.4.x — it inherits model.primary).
+          // Heavier roles — transcript compaction, vision, PDF analysis —
+          // go through cloud models for quality. Users can still override
+          // interactively in the model picker; these are only the defaults.
           model: {
             primary: "litellm/gemma4:e4b",
-            // If Ollama is down, fall through to a cloud model rather than
-            // failing the turn. Sonnet is the cost/quality sweet spot.
-            fallbacks: ["litellm/claude-sonnet-4.6"],
-          },
-          heartbeat: {
-            model: "litellm/gemma4:e4b",
           },
           compaction: {
             model: "litellm/claude-sonnet-4.6",
-          },
-          memoryFlush: {
-            model: "litellm/claude-haiku-4.5",
           },
           imageModel: {
             primary: "litellm/claude-haiku-4.5",
