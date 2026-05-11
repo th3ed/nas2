@@ -21,6 +21,10 @@ EXPECTED_MODELS=(
     "gemma4:e4b"
     "qwen3-coder-next:latest"
     "qwen3:4b-instruct-2507-q8_0"
+    "claude-opus-4.7"
+    "claude-sonnet-4.6"
+    "claude-haiku-4.5"
+    "kimi-k2.6"
 )
 
 LITELLM_KEY=$(ssh_kubectl "get secret litellm-secrets -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}'" | base64 -d 2>/dev/null) || {

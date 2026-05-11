@@ -11,6 +11,13 @@ migrationJob:
 environmentSecrets:
   - litellm-secrets
 
+# Presidio Analyzer/Anonymizer Service URLs. Read by LiteLLM at startup to
+# wire the `presidio` guardrail defined below. Deployed by the `presidio`
+# Argo app (sync wave 10, sm-operator-free namespace).
+envVars:
+  PRESIDIO_ANALYZER_API_BASE: "http://presidio-analyzer.presidio:3000"
+  PRESIDIO_ANONYMIZER_API_BASE: "http://presidio-anonymizer.presidio:3000"
+
 proxy_config:
   model_list:
     - model_name: "gemma4:e4b"
@@ -25,6 +32,48 @@ proxy_config:
       litellm_params:
         model: "ollama_chat/qwen3:4b-instruct-2507-q8_0"
         api_base: "http://ollama.ollama:11434"
+    # OpenRouter-backed cloud models. Each carries the presidio-pii guardrail
+    # so prompts are masked before leaving the tailnet and unmasked on the
+    # way back (output_parse_pii=True). Local ollama entries above stay raw.
+    - model_name: "claude-opus-4.7"
+      litellm_params:
+        model: "openrouter/anthropic/claude-opus-4.7"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
+    - model_name: "claude-sonnet-4.6"
+      litellm_params:
+        model: "openrouter/anthropic/claude-sonnet-4.6"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
+    - model_name: "claude-haiku-4.5"
+      litellm_params:
+        model: "openrouter/anthropic/claude-haiku-4.5"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
+    - model_name: "kimi-k2.6"
+      litellm_params:
+        model: "openrouter/moonshotai/kimi-k2.6"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
+  guardrails:
+    - guardrail_name: "presidio-pii"
+      litellm_params:
+        guardrail: presidio
+        # pre_call masks before the upstream LLM sees the prompt; combined
+        # with output_parse_pii=True below, the original PII is restored in
+        # the response delivered to the client.
+        mode: "pre_call"
+        presidio_language: "en"
+        presidio_filter_scope: "both"
+        output_parse_pii: True
+        pii_entities_config:
+          PERSON: "MASK"
+          EMAIL_ADDRESS: "MASK"
+          CREDIT_CARD: "MASK"
+          US_SSN: "MASK"
+          PHONE_NUMBER: "MASK"
+          IP_ADDRESS: "MASK"
+          IBAN_CODE: "MASK"
   general_settings:
     master_key: os.environ/LITELLM_MASTER_KEY
     disable_spend_logs: true

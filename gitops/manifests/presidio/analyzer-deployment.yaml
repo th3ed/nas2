@@ -1,0 +1,48 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: presidio-analyzer
+  namespace: presidio
+  labels:
+    app.kubernetes.io/name: presidio-analyzer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: presidio-analyzer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: presidio-analyzer
+    spec:
+      containers:
+        - name: presidio-analyzer
+          image: mcr.microsoft.com/presidio-analyzer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 700Mi
+            limits:
+              memory: 1500Mi
