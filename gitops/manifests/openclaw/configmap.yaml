@@ -151,17 +151,25 @@ data:
       },
       agents: {
         defaults: {
-          // Tiered routing: lightweight conversational turns and heartbeats
-          // run on the free local model (heartbeat has no per-role model
-          // override in openclaw 2026.4.x — it inherits model.primary).
-          // Heavier roles — transcript compaction, vision, PDF analysis —
-          // go through cloud models for quality. Users can still override
-          // interactively in the model picker; these are only the defaults.
+          // Local by default. Cloud usage is opt-in per session:
+          //   - model.primary = local Gemma. Conversations + heartbeats
+          //     (which have no per-role override) run on this for free.
+          //   - compaction.model is intentionally unset so compaction
+          //     follows the session-active model. A session that stayed
+          //     local compacts locally; a session where the user picked
+          //     a cloud model in the UI compacts on that cloud model
+          //     (consistent quality, and the user already chose to pay).
+          //     The /app/dist bundle documents compaction.model as an
+          //     "override used only for compaction summarization" — i.e.
+          //     omit it and the session's model is used.
+          //   - imageModel / pdfModel point at cloud. These only fire
+          //     when the user uploads media (explicit action, not
+          //     passive); no local model in our catalog supports vision,
+          //     and openclaw errors with "no image model configured" if
+          //     they're unset. Haiku is the cheapest vision-capable
+          //     Anthropic model; Sonnet is the PDF default for quality.
           model: {
             primary: "litellm/gemma4:e4b",
-          },
-          compaction: {
-            model: "litellm/claude-sonnet-4.6",
           },
           imageModel: {
             primary: "litellm/claude-haiku-4.5",
