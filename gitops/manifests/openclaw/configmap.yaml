@@ -95,41 +95,53 @@ data:
               // OpenRouter-backed cloud models exposed by LiteLLM. LiteLLM
               // strips PII before the request leaves the tailnet and restores
               // it in the response (presidio-pii guardrail with
-              // output_parse_pii=True). Cost fields kept at 0 like the local
-              // entries — display only; flip to real $/1M figures if needed.
+              // output_parse_pii=True).
+              //
+              // reasoning: true is safe here. The bug documented on the local
+              // entries is Ollama-specific: Ollama's OpenAI-compat layer
+              // streams ~100 delta.reasoning chunks before the terminal
+              // delta.tool_calls, which trips openclaw's reasoning handler.
+              // Anthropic and Moonshot emit thinking and tool_use as
+              // separate content blocks so tool calls aren't lost.
+              //
+              // cost in USD per 1M tokens, from OpenRouter pricing pages.
+              // Anthropic cacheRead/cacheWrite are Anthropic's standard
+              // 10% / 125% multipliers on input — OpenRouter doesn't surface
+              // them on the model page but passes through Anthropic's rates.
               {
                 id: "claude-opus-4.7",
                 name: "Claude Opus 4.7",
-                reasoning: false,
+                reasoning: true,
                 input: ["text", "image"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
                 contextWindow: 200000,
                 maxTokens: 32000,
               },
               {
                 id: "claude-sonnet-4.6",
                 name: "Claude Sonnet 4.6",
-                reasoning: false,
+                reasoning: true,
                 input: ["text", "image"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
                 contextWindow: 200000,
                 maxTokens: 32000,
               },
               {
                 id: "claude-haiku-4.5",
                 name: "Claude Haiku 4.5",
-                reasoning: false,
+                reasoning: true,
                 input: ["text", "image"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                cost: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
                 contextWindow: 200000,
                 maxTokens: 16384,
               },
               {
                 id: "kimi-k2.6",
                 name: "Kimi K2.6",
-                reasoning: false,
+                reasoning: true,
                 input: ["text"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                // OpenRouter publishes only input/output for Kimi.
+                cost: { input: 0.74, output: 3.50, cacheRead: 0, cacheWrite: 0 },
                 contextWindow: 256000,
                 maxTokens: 16384,
               },
@@ -139,8 +151,31 @@ data:
       },
       agents: {
         defaults: {
+          // Tiered routing: lightweight roles stay on the free local model;
+          // heavier roles (transcript compaction, memory writes, vision/PDF
+          // analysis) go through cloud models for quality. Users can still
+          // override interactively via the model picker; these are only
+          // the defaults openclaw uses when no override is set.
           model: {
             primary: "litellm/gemma4:e4b",
+            // If Ollama is down, fall through to a cloud model rather than
+            // failing the turn. Sonnet is the cost/quality sweet spot.
+            fallbacks: ["litellm/claude-sonnet-4.6"],
+          },
+          heartbeat: {
+            model: "litellm/gemma4:e4b",
+          },
+          compaction: {
+            model: "litellm/claude-sonnet-4.6",
+          },
+          memoryFlush: {
+            model: "litellm/claude-haiku-4.5",
+          },
+          imageModel: {
+            primary: "litellm/claude-haiku-4.5",
+          },
+          pdfModel: {
+            primary: "litellm/claude-sonnet-4.6",
           },
           // Allowlist: only these keys appear in the UI model picker.
           // models.mode="replace" restricts CLI but has a known bug where
