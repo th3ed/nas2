@@ -92,6 +92,47 @@ data:
                 contextWindow: 32768,
                 maxTokens: 8192,
               },
+              // OpenRouter-backed cloud models exposed by LiteLLM. LiteLLM
+              // strips PII before the request leaves the tailnet and restores
+              // it in the response (presidio-pii guardrail with
+              // output_parse_pii=True). Cost fields kept at 0 like the local
+              // entries — display only; flip to real $/1M figures if needed.
+              {
+                id: "claude-opus-4.7",
+                name: "Claude Opus 4.7",
+                reasoning: false,
+                input: ["text", "image"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 200000,
+                maxTokens: 32000,
+              },
+              {
+                id: "claude-sonnet-4.6",
+                name: "Claude Sonnet 4.6",
+                reasoning: false,
+                input: ["text", "image"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 200000,
+                maxTokens: 32000,
+              },
+              {
+                id: "claude-haiku-4.5",
+                name: "Claude Haiku 4.5",
+                reasoning: false,
+                input: ["text", "image"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 200000,
+                maxTokens: 16384,
+              },
+              {
+                id: "kimi-k2.6",
+                name: "Kimi K2.6",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 256000,
+                maxTokens: 16384,
+              },
             ],
           },
         },
@@ -109,6 +150,10 @@ data:
             "litellm/gemma4:e4b": {},
             "litellm/qwen3-coder-next:latest": {},
             "litellm/qwen3:4b-instruct-2507-q8_0": {},
+            "litellm/claude-opus-4.7": {},
+            "litellm/claude-sonnet-4.6": {},
+            "litellm/claude-haiku-4.5": {},
+            "litellm/kimi-k2.6": {},
           },
         },
       },
