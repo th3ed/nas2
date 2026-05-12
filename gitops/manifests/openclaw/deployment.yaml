@@ -158,6 +158,10 @@ spec:
               mountPath: /home/node/.openclaw/openclaw.json
               subPath: openclaw.json
               readOnly: true
+            - name: app-config
+              mountPath: /home/node/.openclaw/workspace/HEARTBEAT.md
+              subPath: HEARTBEAT.md
+              readOnly: true
           resources:
             limits:
               nvidia.com/gpu: 1

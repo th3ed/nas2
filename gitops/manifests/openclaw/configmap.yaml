@@ -9,6 +9,26 @@ metadata:
   name: openclaw-app-config
   namespace: openclaw
 data:
+  HEARTBEAT.md: |
+    # Heartbeat Context
+
+    This is a personal homelab assistant available on-demand.
+
+    ## Response rules — follow exactly
+
+    Reply **HEARTBEAT_OK** unless a rule below explicitly requires an alert.
+
+    **Alert only if:**
+    1. A message from the owner is explicitly waiting for a reply in this session.
+
+    **Never alert for:**
+    - Ideas, suggestions, or things you could help with
+    - System health speculation (monitoring handles that)
+    - Proactive conversation starters or check-ins
+    - General status updates or summaries
+    - Anything that requires investigation to determine
+
+    **When in doubt, reply HEARTBEAT_OK.**
   openclaw.json: |
     {
       gateway: {
@@ -34,11 +54,6 @@ data:
         },
       },
       channels: {
-        defaults: {
-          heartbeat: {
-            showAlerts: false,
-          },
-        },
         telegram: {
           enabled: true,
           botToken: "${TELEGRAM_BOT_TOKEN}",
@@ -175,6 +190,13 @@ data:
           //     Anthropic model; Sonnet is the PDF default for quality.
           model: {
             primary: "litellm/gemma4:e4b",
+          },
+          heartbeat: {
+            // Fresh isolated session + lightweight context so the model only
+            // sees HEARTBEAT.md, not the full conversation history. Eliminates
+            // hallucinated follow-ups from old chats that cause spurious alerts.
+            isolatedSession: true,
+            lightContext: true,
           },
           imageModel: {
             primary: "litellm/claude-haiku-4.5",
