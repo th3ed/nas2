@@ -1,0 +1,29 @@
+---
+fullnameOverride: n8n
+
+main:
+  config:
+    n8n:
+      webhook_url: "https://n8n.taile9c9c.ts.net/"
+
+  extraEnv:
+    N8N_ENCRYPTION_KEY:
+      valueFrom:
+        secretKeyRef:
+          name: n8n-secrets
+          key: N8N_ENCRYPTION_KEY
+
+  persistence:
+    enabled: true
+    type: dynamic
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+  service:
+    type: ClusterIP
+    port: 5678
+
+  replicaCount: 1
+  deploymentStrategy:
+    type: Recreate
