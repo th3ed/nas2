@@ -13,3 +13,4 @@ bitwarden_namespaces:
   - openclaw
   - monitoring
   - litellm
+  - n8n
