@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: ollama
   namespace: ollama
+  annotations:
+    tailscale.com/http-redirect: "true"
 spec:
   ingressClassName: tailscale
   defaultBackend:
