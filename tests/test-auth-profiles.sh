@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Invariant: auth-profiles.json inside the openclaw pod has the v1 schema with
-# an ollama-local:default entry. Without this, openclaw fails with
-# "No API key found for provider ollama-local" on every model call.
-# Schema: {"version":1,"profiles":{"ollama-local:default":{"type":...,"provider":...,"key":...}}}
+# a litellm:default entry. Without this, openclaw fails with
+# "No API key found for provider litellm" on every model call.
+# Schema: {"version":1,"profiles":{"litellm:default":{"type":...,"provider":...,"key":...}}}
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -35,7 +35,7 @@ json=$(ssh_script <<<"$remote") || {
 errors=()
 echo "$json" | grep -qE '"version"\s*:\s*1'       || errors+=("missing version:1")
 echo "$json" | grep -q '"profiles"'               || errors+=("missing profiles key")
-echo "$json" | grep -q '"ollama-local:default"'   || errors+=("missing ollama-local:default entry")
+echo "$json" | grep -q '"litellm:default"'        || errors+=("missing litellm:default entry")
 
 if [[ ${#errors[@]} -gt 0 ]]; then
     fail "$TITLE: ${errors[*]} — got: $json"
