@@ -30,6 +30,10 @@ grafana:
       type: loki
       url: http://loki-gateway.monitoring.svc.cluster.local
       access: proxy
+    - name: Tempo
+      type: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      access: proxy
   # Grafana fetches these dashboard JSONs from grafana.com once at startup
   # (cluster has internet egress) and provisions them into the default folder.
   # Pin revisions so an upstream republish can't silently change panels.

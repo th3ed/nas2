@@ -75,6 +75,10 @@ Never propose `make apply` or `kubectl apply` as a fix from inside a diagnostic 
 
 ## Workflow protocol
 
+### Consult documentation before configuring
+
+Before making a configuration change for any service (openclaw, LiteLLM, Argo CD, Prometheus, etc.), look up the correct setting in that service's official documentation on the web. Do not guess at config field names, assume comments in existing YAML are authoritative, or reverse-engineer app binaries. Read the docs first, then apply the setting.
+
 ### Debugging discipline
 
 Before changing any config, state your hypothesis for the root cause and one piece of evidence supporting it. If your first fix doesn't resolve the issue, stop and re-diagnose from scratch instead of trying another fix. (Test failures due to cluster-sync timing are handled automatically by `tests/run-all.sh --retry 3` with 30 s backoff — those retries are not "trying the same fix again.")

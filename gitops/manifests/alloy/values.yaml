@@ -3,12 +3,41 @@ controller:
   type: daemonset
 
 alloy:
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
   configMap:
     create: true
     content: |-
       logging {
         level  = "info"
         format = "logfmt"
+      }
+
+      // Receive OTLP traces from LiteLLM (and any other in-cluster services).
+      otelcol.receiver.otlp "default" {
+        grpc { endpoint = "0.0.0.0:4317" }
+        http { endpoint = "0.0.0.0:4318" }
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      // Forward traces to Tempo single-binary instance.
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring.svc.cluster.local:4317"
+          tls {
+            insecure = true
+            insecure_skip_verify = true
+          }
+        }
       }
 
       discovery.kubernetes "pods" {
@@ -46,7 +75,7 @@ alloy:
       }
 
       // Ship API-server-level events (pod scheduling, OOMKills, image-pull
-      // backoffs, CrashLoopBackOff transitions) into Loki alongside pod logs.
+      // backoffs, CrashLoopBackOff transitions) into <PERSON_269>ngside pod logs.
       // Invaluable for after-the-fact deploy postmortems where the failing
       // pod's stdout has already rolled out of memory.
       loki.source.kubernetes_events "events" {

@@ -1,0 +1,19 @@
+---
+# Auto-discovered by the kube-prometheus-stack Prometheus
+# (serviceMonitorSelectorNilUsesHelmValues: false in
+# kube-prometheus-stack/values.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: litellm-metrics
+  namespace: litellm
+  labels:
+    app.kubernetes.io/name: litellm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: litellm
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

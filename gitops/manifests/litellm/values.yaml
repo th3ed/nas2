@@ -17,6 +17,9 @@ environmentSecrets:
 envVars:
   PRESIDIO_ANALYZER_API_BASE: "http://presidio-analyzer.presidio:3000"
   PRESIDIO_ANONYMIZER_API_BASE: "http://presidio-anonymizer.presidio:3000"
+  OTEL_EXPORTER: "otlp_http"
+  OTEL_ENDPOINT: "http://alloy.monitoring.svc.cluster.local:4318"
+  PROMETHEUS_MULTIPROC_DIR: "/tmp/prometheus_multiproc"
 
 proxy_config:
   model_list:
@@ -45,9 +48,9 @@ proxy_config:
         model: "openrouter/anthropic/claude-sonnet-4.6"
         api_key: "os.environ/OPENROUTER_API_KEY"
         guardrails: ["presidio-pii"]
-    - model_name: "claude-haiku-4.5"
+    - model_name: "claude-haiku-4.1"
       litellm_params:
-        model: "openrouter/anthropic/claude-haiku-4.5"
+        model: "openrouter/anthropic/claude-haiku-4.1"
         api_key: "os.environ/OPENROUTER_API_KEY"
         guardrails: ["presidio-pii"]
     - model_name: "kimi-k2.6"
@@ -76,9 +79,6 @@ proxy_config:
     - guardrail_name: "presidio-pii"
       litellm_params:
         guardrail: presidio
-        # pre_call masks before the upstream LLM sees the prompt; combined
-        # with output_parse_pii=True below, the original PII is restored in
-        # the response delivered to the client.
         mode: "pre_call"
         presidio_language: "en"
         presidio_filter_scope: "both"
@@ -91,6 +91,7 @@ proxy_config:
           PHONE_NUMBER: "MASK"
           IP_ADDRESS: "MASK"
           IBAN_CODE: "MASK"
+  litellm_settings:
+    callbacks: ["prometheus", "otel"]
   general_settings:
     master_key: os.environ/LITELLM_MASTER_KEY
-    disable_spend_logs: true
