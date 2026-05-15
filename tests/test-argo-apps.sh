@@ -18,7 +18,7 @@ if [[ "$total" -eq 0 ]]; then
     exit 1
 fi
 
-bad=$(echo "$apps" | grep -cE 'OutOfSync|Degraded|Unknown|Missing' 2>/dev/null || echo 0)
+bad=$(echo "$apps" | grep -cE 'OutOfSync|Degraded|Unknown|Missing' 2>/dev/null || true)
 if [[ "$bad" -gt 0 ]]; then
     fail "$TITLE: $bad/$total not Synced/Healthy"
     echo "$apps" | grep -E 'OutOfSync|Degraded|Unknown|Missing' >&2
