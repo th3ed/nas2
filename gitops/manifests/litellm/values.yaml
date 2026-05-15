@@ -21,6 +21,14 @@ envVars:
   OTEL_ENDPOINT: "http://alloy.monitoring.svc.cluster.local:4318"
   PROMETHEUS_MULTIPROC_DIR: "/tmp/prometheus_multiproc"
 
+volumes:
+  - name: prometheus-multiproc
+    emptyDir: {}
+
+volumeMounts:
+  - name: prometheus-multiproc
+    mountPath: /tmp/prometheus_multiproc
+
 proxy_config:
   model_list:
     - model_name: "gemma4:e4b"
