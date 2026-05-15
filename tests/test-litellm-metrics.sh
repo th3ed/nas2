@@ -17,8 +17,8 @@ kubectl -n litellm port-forward svc/litellm 44444:4000 >/dev/null 2>&1 &
 PF_PID=$!
 sleep 3
 
-METRICS=$(curl -s http://localhost:44444/metrics 2>/dev/null || true)
-if echo "$METRICS" | grep -q "litellm_"; then
+curl -L -s http://localhost:44444/metrics >/tmp/litellm-metrics.txt 2>/dev/null || true
+if grep -q "litellm_" /tmp/litellm-metrics.txt; then
   echo "PASS: LiteLLM /metrics endpoint is reachable and exposes litellm_* metrics"
   exit 0
 else
