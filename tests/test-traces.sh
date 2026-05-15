@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check trace ingestion by verifying the Tempo distributor received spans.
-# We look at the tempo_metrics_generator or tempo_build_info as a proxy.
-METRICS=$(kubectl get --raw "/api/v1/namespaces/monitoring/services/tempo:http/proxy/metrics" 2>/dev/null || true)
+# Check trace ingestion by verifying the Tempo metrics endpoint is reachable.
+# Tempo single-binary exposes its own prometheus metrics on port 3200
+# under the service port name 'tempo-prom-metrics'.
+METRICS=$(kubectl get --raw "/api/v1/namespaces/monitoring/services/tempo:tempo-prom-metrics/proxy/metrics" 2>/dev/null || true)
 if echo "$METRICS" | grep -q "tempo_build_info"; then
   echo "PASS: Tempo metrics endpoint is reachable (trace pipeline active)"
   exit 0
