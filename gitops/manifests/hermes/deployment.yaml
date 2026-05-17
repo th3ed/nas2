@@ -1,0 +1,64 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes
+  namespace: hermes
+  labels:
+    app.kubernetes.io/name: hermes
+spec:
+  replicas: 1
+  strategy:
+    # Recreate so subPath-mounted config.yaml refreshes cleanly on
+    # ConfigMap edits (same gotcha as openclaw — subPath mounts freeze at
+    # pod start). Combined with ReadWriteOnce PVC this avoids two pods
+    # racing for /opt/data.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hermes
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hermes
+    spec:
+      # PVC is owned by root by default; Hermes drops to non-root UID 10000
+      # via gosu in its entrypoint. fsGroup makes the mount writable by
+      # that GID so memories/, skills/, sessions/, logs/, and .env can be
+      # written by the hermes user.
+      securityContext:
+        fsGroup: 10000
+      containers:
+        - name: hermes
+          image: nousresearch/hermes-agent:latest
+          imagePullPolicy: IfNotPresent
+          # Default entrypoint is the gosu/su-exec wrapper that drops to
+          # the hermes user; args run the OpenAI-compatible gateway.
+          args: ["gateway", "run"]
+          ports:
+            - name: http
+              containerPort: 8642
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: hermes-secrets
+                optional: false
+          env:
+            - name: API_SERVER_ENABLED
+              value: "true"
+            - name: API_SERVER_HOST
+              value: "0.0.0.0"
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: app-config
+              mountPath: /opt/data/config.yaml
+              subPath: config.yaml
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hermes-data
+        - name: app-config
+          configMap:
+            name: hermes-app-config

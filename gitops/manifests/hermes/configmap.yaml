@@ -1,0 +1,59 @@
+---
+# Declarative Hermes runtime config. Mounted into the container at
+# /opt/data/config.yaml via subPath so it sits alongside the PVC-backed
+# state directory (memories/, skills/, sessions/, logs/, .env, etc.).
+# Hermes interpolates ${VAR} from the process environment; LITELLM_API_KEY
+# comes from the envFrom-injected hermes-secrets Secret.
+#
+# Schema: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+# All model slots are routed through the in-cluster LiteLLM proxy at
+# litellm.litellm:4000, which provides per-model PII guardrails and a
+# single observability surface (prometheus + otel callbacks).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-app-config
+  namespace: hermes
+data:
+  config.yaml: |
+    # Main model — used for the primary agent loop and Telegram conversations.
+    # Sonnet 4.6 is the default; users can switch per-session via the CLI/API.
+    model:
+      provider: openai
+      model: claude-sonnet-4.6
+      base_url: http://litellm.litellm:4000/v1
+      api_key: ${LITELLM_API_KEY}
+
+    # Cheap fallback if the primary errors / rate-limits.
+    fallback_model:
+      provider: openai
+      model: claude-haiku-4.5
+      base_url: http://litellm.litellm:4000/v1
+      api_key: ${LITELLM_API_KEY}
+
+    # Vision-capable model for image inputs. Haiku is the cheapest Anthropic
+    # vision option; local Ollama models in our catalog are text-only.
+    auxiliary:
+      vision:
+        provider: openai
+        model: claude-haiku-4.5
+        base_url: http://litellm.litellm:4000/v1
+        api_key: ${LITELLM_API_KEY}
+      # Context compression runs frequently on long sessions — route to the
+      # free local Gemma model to avoid spend on summarization.
+      compression:
+        provider: openai
+        model: gemma4:e4b
+        base_url: http://litellm.litellm:4000/v1
+        api_key: ${LITELLM_API_KEY}
+
+    # Run shell commands inside the hermes pod itself. Blast radius is bounded
+    # by the namespace + PVC; nothing on the host or other namespaces is reachable.
+    terminal:
+      backend: local
+
+    # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
+    # reads from the envFrom-injected hermes-secrets Secret. Long-polling
+    # mode — no webhook needed; the Tailscale Ingress only fronts the
+    # OpenAI-compatible API server on port 8642.

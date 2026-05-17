@@ -66,6 +66,11 @@ proxy_config:
         model: "openrouter/moonshotai/kimi-k2.6"
         api_key: "os.environ/OPENROUTER_API_KEY"
         guardrails: ["presidio-pii"]
+    - model_name: "glm-5.1"
+      litellm_params:
+        model: "openrouter/z-ai/glm-5.1"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
     # Gemini free-tier models via Google AI Studio. presidio-pii guardrail masks
     # PII before requests leave the tailnet (same policy as OpenRouter models).
     - model_name: "gemini-2.5-flash"

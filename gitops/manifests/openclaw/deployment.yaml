@@ -7,7 +7,8 @@ metadata:
   labels:
     app.kubernetes.io/name: openclaw
 spec:
-  replicas: 1
+  # Disabled 2026-05-16 while evaluating Hermes. Re-enable by setting replicas: 1.
+  replicas: 0
   strategy:
     type: Recreate
   selector:

@@ -1,17 +1,17 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: n8n
-  namespace: n8n
+  name: hermes
+  namespace: hermes
   annotations:
     tailscale.com/http-redirect: "true"
 spec:
   ingressClassName: tailscale
   defaultBackend:
     service:
-      name: n8n
+      name: hermes
       port:
-        number: 5678
+        number: 80
   tls:
     - hosts:
-        - n8n
+        - hermes
