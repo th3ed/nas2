@@ -24,10 +24,20 @@ envVars:
 volumes:
   - name: prometheus-multiproc
     emptyDir: {}
+  # See callbacks-configmap.yaml — gemma_tool_rewrite is mounted under
+  # /app (LiteLLM's working dir) so it is importable as
+  # `gemma_tool_rewrite` from litellm_settings.callbacks below.
+  - name: callbacks
+    configMap:
+      name: litellm-callbacks
 
 volumeMounts:
   - name: prometheus-multiproc
     mountPath: /tmp/prometheus_multiproc
+  - name: callbacks
+    mountPath: /app/gemma_tool_rewrite.py
+    subPath: gemma_tool_rewrite.py
+    readOnly: true
 
 proxy_config:
   model_list:
@@ -105,6 +115,10 @@ proxy_config:
           IP_ADDRESS: "MASK"
           IBAN_CODE: "MASK"
   litellm_settings:
-    callbacks: ["prometheus", "otel"]
+    # gemma_tool_rewrite.handler: pre_call_hook that rewrites role:tool ->
+    # role:user for ollama gemma models (gemma's chat renderer silently
+    # drops role:tool messages, looping web_search forever). See
+    # callbacks-configmap.yaml and the mount under /app/ above.
+    callbacks: ["gemma_tool_rewrite.handler", "prometheus", "otel"]
   general_settings:
     master_key: os.environ/LITELLM_MASTER_KEY

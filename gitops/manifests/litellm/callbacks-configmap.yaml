@@ -1,0 +1,93 @@
+---
+# Embedded LiteLLM pre_call_hook callback. Mounted into the LiteLLM pod
+# at /app/gemma_tool_rewrite.py (importable as `gemma_tool_rewrite`
+# because /app is LiteLLM's working dir; see
+# /app/litellm/integrations/custom_logger.py).
+#
+# Why it exists: Gemma 4's compiled Ollama renderer
+# (RENDERER gemma4 / PARSER gemma4) silently drops role:tool messages
+# from the prompt that reaches the model. Each turn the model
+# re-derives "I should call this tool" because the prior result is
+# invisible, producing an infinite web_search loop on any task that
+# requires reading tool output (e.g. weather queries).
+#
+# This callback rewrites role:tool -> role:user (and assistant
+# tool_calls -> assistant text) before LiteLLM forwards to Ollama, only
+# for models matching ollama*gemma*. Every other model passes through
+# unchanged.
+#
+# Removable in one commit once Ollama's gemma renderer handles role:
+# tool natively.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-callbacks
+  namespace: litellm
+data:
+  gemma_tool_rewrite.py: |
+    """Rewrite role:tool messages to role:user for gemma* on Ollama."""
+    from litellm.integrations.custom_logger import CustomLogger
+
+
+    def _is_gemma_ollama(model: str) -> bool:
+        m = (model or "").lower()
+        return m.startswith("ollama") and "gemma" in m
+
+
+    def _rewrite_messages(messages):
+        call_id_to_name = {}
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("role") == "assistant":
+                for tc in msg.get("tool_calls") or []:
+                    cid = tc.get("id")
+                    name = (tc.get("function") or {}).get("name")
+                    if cid and name:
+                        call_id_to_name[cid] = name
+
+        out = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                out.append(msg)
+                continue
+            role = msg.get("role")
+            if role == "tool":
+                name = call_id_to_name.get(msg.get("tool_call_id"), "tool")
+                content = msg.get("content", "")
+                out.append(
+                    {
+                        "role": "user",
+                        "content": f"[tool_result for {name}]\n{content}",
+                    }
+                )
+            elif role == "assistant" and msg.get("tool_calls"):
+                parts = []
+                if msg.get("content"):
+                    parts.append(msg["content"])
+                for tc in msg["tool_calls"]:
+                    fn = tc.get("function") or {}
+                    parts.append(
+                        f"[calling {fn.get('name', 'tool')}({fn.get('arguments', '')})]"
+                    )
+                out.append({"role": "assistant", "content": "\n".join(parts)})
+            else:
+                out.append(msg)
+        return out
+
+
+    class GemmaToolRewrite(CustomLogger):
+        async def async_pre_call_hook(
+            self, user_api_key_dict, cache, data, call_type
+        ):
+            if call_type not in ("completion", "acompletion"):
+                return data
+            if not _is_gemma_ollama(data.get("model", "")):
+                return data
+            msgs = data.get("messages")
+            if isinstance(msgs, list):
+                data["messages"] = _rewrite_messages(msgs)
+            return data
+
+
+    handler = GemmaToolRewrite()
