@@ -110,23 +110,45 @@ No config change required.
 
 ## Check 4 — GitHub App token minting from a K8s Pod
 
-**Result: DEFERRED.** Blocked on the one-time GitHub App setup.
+**Result: PASS.** End-to-end token-minting flow verified.
 
-Action items for the user (steps in
-`/Users/ed/.claude/plans/i-want-to-use-majestic-peach.md` under
-"GitHub App setup — step by step"):
+Setup completed:
+- GitHub App `nas2-agents-th3ed` created with repository-scoped
+  permissions: contents/issues/pull_requests/checks **read+write**,
+  actions/metadata **read-only**.
+- App installed on `th3ed/nas2` only ("selected" repo scope).
+- App ID, Installation ID, and private-key PEM stored in Bitwarden
+  Secrets Manager; wired through a new BitwardenSecret at
+  `gitops/manifests/github-app/bitwarden-secret.yaml`.
+- `github-app` added to `bitwarden_namespaces` in
+  `roles/argocd_bootstrap/defaults/main.yml` and Ansible re-applied
+  (`make apply-tags TAGS=argocd`) to seed `bw-auth-token` in the new
+  namespace.
+- sm-operator materialized `github-app-secrets` with the three keys
+  `GH_APP_ID` / `GH_APP_INSTALLATION_ID` / `GH_APP_PRIVATE_KEY`.
 
-1. Create the App at https://github.com/settings/apps/new
-2. Install on the `th3ed/nas2` repo
-3. Store app-id, installation-id, private-key in Bitwarden Secrets Manager
-4. Hand over the three `bwSecretId`s; the BitwardenSecret manifest at
-   `gitops/manifests/github-app/bitwarden-secret.yaml` will be wired
-   from them.
+Verification Pod (`python:3.12-slim` + PyJWT + cryptography + requests)
+that mounted `github-app-secrets` via `envFrom`:
 
-Once the manifest syncs, run a one-shot Pod that mounts the App private
-key, signs a JWT, calls
-`POST /app/installations/{id}/access_tokens`, and confirms
-`gh api user` accepts the resulting 1-hour token.
+```
+Mint token: HTTP 201
+  token prefix: ghs_...  expires_at=<now+60min>
+  permissions granted: [actions:read, checks:write, contents:write,
+                        issues:write, metadata:read, pull_requests:write]
+  repository_selection: selected
+
+GET repos/th3ed/nas2:                HTTP 200  → full_name: th3ed/nas2
+GET issues:                           HTTP 200  (rate_limit_remaining: 4998)
+GET /installation/repositories:       ['th3ed/nas2']
+
+VERDICT: PASS
+```
+
+The minted token starts with `ghs_` (installation-token prefix; PAT
+prefix is `ghp_` or fine-grained `github_pat_`). 1-hour TTL is the
+default. The PAT-rotation problem is now solved — no calendar
+reminders, no rotation cron; tokens that leak via prompt injection die
+on their own inside an hour.
 
 ---
 
@@ -152,8 +174,26 @@ infrastructure is purely preventive.
 | 1. OpenCode + LiteLLM end-to-end | PASS | No — design now includes AppArmor annotation |
 | 2. LiteLLM Anthropic-compat tool streaming | PARTIAL (chat/completions PASS, messages FAIL) | No — agents use chat/completions only |
 | 3. Presidio vs source code | PASS | No |
-| 4. GitHub App token minting | DEFERRED | **Yes** — Phase 1 needs the App |
+| 4. GitHub App token minting | PASS | No |
 | Cost-control plumbing | DONE | n/a |
 
-Phase 1 (monitoring + spec-driver) is unblocked except for the GitHub
-App setup, which the user owns.
+**Phase 0 complete. Phase 1 (monitoring + spec-driver) is unblocked.**
+
+### Operational notes for future agent runs
+
+- **Token-minting Job recipe:** mount `github-app/github-app-secrets` via
+  `envFrom`; sign `{iat: now-60, exp: now+540, iss: GH_APP_ID-as-string}`
+  with RS256; POST `/app/installations/{id}/access_tokens` with the JWT
+  as Bearer; the 201 response body's `token` field is the
+  `ghs_…` installation token valid for the next hour.
+- **PyJWT quirk:** modern PyJWT requires `iss` to be a string, not int.
+  Pass the App ID as the env-var string directly (it's already a string
+  in the materialized Secret).
+- **sm-operator first-reconcile gotcha:** when adding a namespace to
+  `bitwarden_namespaces`, the first reconcile of the BitwardenSecret can
+  happen BEFORE Ansible seeds `bw-auth-token`. The operator backs off to
+  ~5 min on failure. Force an immediate re-reconcile with:
+  `kubectl -n <ns> annotate bitwardensecret <name> force-reconcile="$(date +%s)" --overwrite`.
+- **NetworkPolicy:** the `github-app` namespace currently has no
+  NetworkPolicy. Phase 3 should restrict egress on the token-minting
+  Jobs to `api.github.com:443` + `kubernetes.default.svc:443` only.
