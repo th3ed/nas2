@@ -1,0 +1,38 @@
+---
+# SearXNG runtime settings, mounted at /etc/searxng/settings.yml via subPath.
+# `use_default_settings: true` inherits the upstream engine list — we only
+# override the keys below. `search.formats` must include `json` so Hermes'
+# web_search tool can parse responses; `html` is kept so the tailnet-exposed
+# UI is usable. `limiter: false` disables SearXNG's IP-based rate limiter
+# (the tailnet is small and trusted; the limiter would also throttle the
+# in-cluster Hermes JSON probes).
+#
+# secret_key signs CSRF tokens and morty-proxy URLs. The tailnet IS the
+# auth boundary — same model as ollama/openclaw/hermes. If SearXNG is ever
+# exposed beyond the tailnet, rotate this to a Bitwarden-backed random
+# value first.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-settings
+  namespace: searxng
+data:
+  settings.yml: |
+    use_default_settings: true
+    general:
+      instance_name: "nas2-searxng"
+      debug: false
+    server:
+      secret_key: "nas2-internal-only-not-a-secret-rotate-if-exposed"
+      limiter: false
+      image_proxy: false
+      port: 8080
+      bind_address: "0.0.0.0"
+    ui:
+      static_use_hash: true
+    search:
+      safe_search: 0
+      autocomplete: ""
+      formats:
+        - html
+        - json

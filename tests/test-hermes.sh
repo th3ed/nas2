@@ -56,3 +56,18 @@ else
     fail "$TITLE (HTTP $code, expected 401)"
     exit 1
 fi
+
+# `hermes doctor` enumerates which toolsets are gated on missing creds.
+# A ✓ web line means the SearXNG backend (SEARXNG_URL env) is wired up
+# and the web_search tool is dispatchable. A "⚠ web (missing ..." line
+# means the toolset is silently disabled.
+TITLE="hermes: web toolset enabled (no missing-vars warning in doctor)"
+doctor_out=$(ssh_kubectl "exec -n hermes deploy/hermes -- /opt/hermes/.venv/bin/hermes doctor" 2>&1) || {
+    fail "$TITLE: hermes doctor failed"
+    exit 1
+}
+if echo "$doctor_out" | grep -qE '⚠ web \(missing'; then
+    fail "$TITLE: hermes doctor still reports missing web backend credentials"
+    exit 1
+fi
+pass "$TITLE"

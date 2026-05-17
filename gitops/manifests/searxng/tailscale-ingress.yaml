@@ -1,0 +1,18 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: searxng
+  namespace: searxng
+  annotations:
+    tailscale.com/http-redirect: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: searxng
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - searxng

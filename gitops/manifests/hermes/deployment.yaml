@@ -89,6 +89,12 @@ spec:
               value: "9119"
             - name: HERMES_DASHBOARD_TUI
               value: "1"
+            # Points the Hermes `web` toolset (web_search/web_extract/web_crawl)
+            # at the in-cluster SearXNG instance. Presence of SEARXNG_URL
+            # is the sole gate Hermes uses to enable the toolset; no API
+            # key is required for the SearXNG backend.
+            - name: SEARXNG_URL
+              value: http://searxng.searxng:8080
           volumeMounts:
             - name: data
               mountPath: /opt/data

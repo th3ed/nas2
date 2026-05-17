@@ -1,0 +1,66 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: searxng
+  namespace: searxng
+  labels:
+    app.kubernetes.io/name: searxng
+spec:
+  replicas: 1
+  strategy:
+    # Recreate so the subPath-mounted settings.yml refreshes cleanly on
+    # ConfigMap edits (same gotcha as openclaw/hermes — subPath mounts
+    # freeze at pod start).
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searxng
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: searxng
+    spec:
+      containers:
+        - name: searxng
+          image: searxng/searxng:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # SEARXNG_BASE_URL is used by the upstream uwsgi config to
+            # build absolute URLs (e.g., in /opensearch.xml). Setting it
+            # to the tailnet hostname keeps generated links coherent for
+            # browser users of the Ingress.
+            - name: SEARXNG_BASE_URL
+              value: https://searxng.taile9c9c.ts.net/
+          volumeMounts:
+            - name: settings
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: settings
+          configMap:
+            name: searxng-settings
