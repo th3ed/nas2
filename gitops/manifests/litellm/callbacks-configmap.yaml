@@ -26,15 +26,17 @@ metadata:
 data:
   gemma_tool_rewrite.py: |
     """Rewrite role:tool messages to role:user for gemma* on Ollama."""
-    import sys
     from litellm.integrations.custom_logger import CustomLogger
 
-    print("[gemma_tool_rewrite] module loaded", flush=True)
 
-
-    def _is_gemma_ollama(model: str) -> bool:
-        m = (model or "").lower()
-        return m.startswith("ollama") and "gemma" in m
+    def _is_gemma(model: str) -> bool:
+        # The pre_call_hook receives the user-facing model_name from
+        # model_list (e.g. "gemma4:e4b"), not the resolved provider
+        # path like "ollama_chat/gemma4:e4b" — so we cannot gate on
+        # "ollama" prefix. Substring match on "gemma" is sufficient
+        # because every gemma model in this proxy's catalog routes to
+        # Ollama (where the role:tool drop occurs).
+        return "gemma" in (model or "").lower()
 
 
     def _rewrite_messages(messages):
@@ -83,18 +85,13 @@ data:
         async def async_pre_call_hook(
             self, user_api_key_dict, cache, data, call_type
         ):
-            model = data.get("model", "")
-            roles = [m.get("role") for m in (data.get("messages") or []) if isinstance(m, dict)]
-            print(f"[gemma_tool_rewrite] hook fired: model={model!r} call_type={call_type!r} roles={roles}", flush=True)
             if call_type not in ("completion", "acompletion"):
                 return data
-            if not _is_gemma_ollama(model):
-                print(f"[gemma_tool_rewrite] skipped (not gemma ollama)", flush=True)
+            if not _is_gemma(data.get("model", "")):
                 return data
             msgs = data.get("messages")
             if isinstance(msgs, list):
                 data["messages"] = _rewrite_messages(msgs)
-                print(f"[gemma_tool_rewrite] rewrote {len(msgs)} messages", flush=True)
             return data
 
 
