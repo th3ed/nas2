@@ -25,7 +25,7 @@ data:
     # Sonnet 4.6 is the default; users can switch per-session via the CLI/API.
     model:
       provider: custom
-      model: claude-sonnet-4.6
+      model: "gemma4:e4b"
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
 
@@ -56,6 +56,28 @@ data:
     # by the namespace + PVC; nothing on the host or other namespaces is reachable.
     terminal:
       backend: local
+
+    # Expose all LiteLLM-proxied models in the Hermes model picker. The custom
+    # provider profile has base_url="" in its compiled-in defaults, so fetch_models()
+    # returns None and automatic discovery never fires. custom_providers is the
+    # config-driven mechanism that populates the picker.
+    custom_providers:
+      - name: "LiteLLM"
+        base_url: http://litellm.litellm:4000/v1
+        api_key: ${LITELLM_API_KEY}
+        model: "gemma4:e4b"
+        models:
+          - "gemma4:e4b"
+          - "qwen3-coder-next:latest"
+          - "qwen3:4b-instruct-2507-q8_0"
+          - "claude-opus-4.7"
+          - "claude-sonnet-4.6"
+          - "claude-haiku-4.5"
+          - "kimi-k2.6"
+          - "glm-5.1"
+          - "gemini-2.5-flash"
+          - "gemini-2.5-pro"
+          - "gemini-2.0-flash"
 
     # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
     # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
