@@ -25,6 +25,7 @@ EXPECTED_MODELS=(
     "claude-sonnet-4.6"
     "claude-haiku-4.5"
     "kimi-k2.6"
+    "glm-5.1"
 )
 
 LITELLM_KEY=$(ssh_kubectl "get secret litellm-secrets -n litellm -o jsonpath='{.data.LITELLM_MASTER_KEY}'" | base64 -d 2>/dev/null) || {

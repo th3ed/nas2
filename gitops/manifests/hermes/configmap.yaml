@@ -6,6 +6,11 @@
 # comes from the envFrom-injected hermes-secrets Secret.
 #
 # Schema: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+#
+# provider: custom is the registered name for arbitrary OpenAI-compatible
+# endpoints (the docs list "openai" but the live binary registers it as
+# "custom"; aliases include ollama/local/vllm/llamacpp). See
+# /opt/hermes/plugins/model-providers/custom/__init__.py in the image.
 # All model slots are routed through the in-cluster LiteLLM proxy at
 # litellm.litellm:4000, which provides per-model PII guardrails and a
 # single observability surface (prometheus + otel callbacks).
@@ -19,14 +24,14 @@ data:
     # Main model — used for the primary agent loop and Telegram conversations.
     # Sonnet 4.6 is the default; users can switch per-session via the CLI/API.
     model:
-      provider: openai
+      provider: custom
       model: claude-sonnet-4.6
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
 
     # Cheap fallback if the primary errors / rate-limits.
     fallback_model:
-      provider: openai
+      provider: custom
       model: claude-haiku-4.5
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
@@ -35,14 +40,14 @@ data:
     # vision option; local Ollama models in our catalog are text-only.
     auxiliary:
       vision:
-        provider: openai
+        provider: custom
         model: claude-haiku-4.5
         base_url: http://litellm.litellm:4000/v1
         api_key: ${LITELLM_API_KEY}
       # Context compression runs frequently on long sessions — route to the
       # free local Gemma model to avoid spend on summarization.
       compression:
-        provider: openai
+        provider: custom
         model: gemma4:e4b
         base_url: http://litellm.litellm:4000/v1
         api_key: ${LITELLM_API_KEY}
