@@ -24,9 +24,11 @@ envVars:
 volumes:
   - name: prometheus-multiproc
     emptyDir: {}
-  # See callbacks-configmap.yaml — gemma_tool_rewrite is mounted under
-  # /app (LiteLLM's working dir) so it is importable as
-  # `gemma_tool_rewrite` from litellm_settings.callbacks below.
+  # See callbacks-configmap.yaml. Mounted inside site-packages (which is
+  # in sys.path) so it imports as a top-level `gemma_tool_rewrite`
+  # module. /app (LiteLLM's working dir) is *not* in sys.path, and
+  # adding it via PYTHONPATH would shadow /app/litellm/ over the
+  # installed litellm package.
   - name: callbacks
     configMap:
       name: litellm-callbacks
@@ -35,7 +37,7 @@ volumeMounts:
   - name: prometheus-multiproc
     mountPath: /tmp/prometheus_multiproc
   - name: callbacks
-    mountPath: /app/gemma_tool_rewrite.py
+    mountPath: /usr/lib/python3.13/site-packages/gemma_tool_rewrite.py
     subPath: gemma_tool_rewrite.py
     readOnly: true
 
