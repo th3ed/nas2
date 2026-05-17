@@ -42,16 +42,17 @@ if [[ "$tls_host" != "hermes" ]]; then
 fi
 pass "$TITLE"
 
-# Gateway is reachable over HTTPS via Tailscale Ingress. Hermes's
-# OpenAI-compatible API requires API_SERVER_KEY, so unauthenticated
-# requests return 401 — which still proves the proxy + pod are up.
-# Treat 2xx, 3xx, and 401 as success; anything else (000, 502, 503) fails.
-TITLE="hermes: reachable over HTTPS via Tailscale"
-code=$(curl -sSIk --max-time 15 -o /dev/null -w '%{http_code}' \
-    https://hermes.taile9c9c.ts.net/ 2>/dev/null || echo "000")
-if [[ "$code" =~ ^([23]|401$) ]]; then
+# Gateway is reachable over HTTPS via Tailscale Ingress. Hit /v1/models
+# without auth — Hermes's OpenAI-compatible API server requires
+# API_SERVER_KEY and returns 401, which proves both the Tailscale proxy
+# and the in-pod gateway are alive AND the auth gate is enforced. Hitting
+# / would return 404 (no root route) which is also "up" but less specific.
+TITLE="hermes: gateway responds 401 unauthenticated on /v1/models"
+code=$(curl -sk --max-time 15 -o /dev/null -w '%{http_code}' \
+    https://hermes.taile9c9c.ts.net/v1/models 2>/dev/null || echo "000")
+if [[ "$code" == "401" ]]; then
     pass "$TITLE (HTTP $code)"
 else
-    fail "$TITLE (HTTP $code)"
+    fail "$TITLE (HTTP $code, expected 401)"
     exit 1
 fi
