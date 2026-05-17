@@ -94,6 +94,29 @@ Workflow for every fix or new feature:
 4. Commit and push to `main`.
 5. Verify with the Kubernetes MCP tools, `nas2-diag --summary`, or `make argo-status`.
 
+### Fast inner-loop for declarative changes
+
+The declarative-first workflow is the right end-state, but the
+git-push → Argo poll (~3 min) → reconcile loop is too slow when you
+are iterating on a fix. During debugging:
+
+1. Edit the manifest under `gitops/`.
+2. `scp` it to nas2 and `kubectl apply -f` directly. Argo re-converges
+   on the same content on its next refresh — no drift.
+3. If the change is a ConfigMap that's mounted via `subPath` (openclaw,
+   litellm callbacks, hermes prompt_builder), follow with
+   `kubectl -n <ns> rollout restart deploy/<app>`. SubPath mounts are
+   frozen at pod-start; the apply alone won't reach the running pod.
+4. `kubectl rollout status deploy/<app> --timeout=120s` to wait
+   synchronously, then run the verification curl/test.
+5. Commit and push once the change is verified.
+
+Do **not** rely on `argocd app sync` (or the `make argo-sync` helper)
+to pull a brand-new commit — those re-apply the last revision Argo has
+fetched. To force a git refresh first: `argocd app get <app> --refresh`.
+The naive git-push-and-wait path adds 3–5 min of latency per
+iteration; bypass it during debugging.
+
 ### Git is pre-authorized for routine changes
 
 `git add`, `git commit`, and `git push origin main` are pre-authorized for this repo — proceed without asking when the change is a routine edit under `gitops/`, `group_vars/`, `roles/`, `playbook.yml`, or `CLAUDE.md`. Pausing to ask just slows down the declarative workflow above (step 4 is the normal path).
@@ -143,6 +166,7 @@ Copy these files — do not invent alternatives.
 | Tailscale Ingress | `gitops/manifests/ollama/tailscale-ingress.yaml` |
 | BitwardenSecret CRD | `gitops/manifests/openclaw/bitwarden-secret.yaml` |
 | ignoreDifferences block | `gitops/apps/metallb.yaml` |
+| LiteLLM `pre_call_hook` callback | `gitops/manifests/litellm/callbacks-configmap.yaml` |
 
 Tailnet domain: `taile9c9c.ts.net` (in `group_vars/all/main.yml`).
 GPU workloads: require `runtimeClassName: nvidia` in the PodSpec — see `gitops/manifests/gpu-operator/runtimeclass.yaml`.
@@ -160,4 +184,6 @@ Health checks: add liveness/readiness probes in Deployment manifests where the u
     - the `ollama-local` model provider pointed at `http://ollama.ollama:11434/v1`.
   `${TELEGRAM_BOT_TOKEN}` and `${TELEGRAM_OWNER_ID}` are interpolated at startup from the Bitwarden-backed `openclaw-secrets` Secret (envFrom). Edit the ConfigMap rather than `kubectl exec`-ing `openclaw config set` — the file is the source of truth and an exec-write would be shadowed on the next pod restart. **`subPath` mounts are frozen at pod-start time**, so after editing `openclaw.json` and letting Argo sync, you also need `kubectl -n openclaw rollout restart deploy/openclaw` to pick up the change.
 - **sm-operator delta-sync stale-state**: when you add a *new* `bwSecretId` mapping to a `BitwardenSecret` whose previous sync already succeeded, the operator's reconcile loop logs `No changes to <ns>/<name>. Skipping sync.` and never fetches the new entry. Root cause: the operator gates on Bitwarden's "secrets-modified-since-lastSyncTime" delta API *before* checking whether the materialized K8s Secret actually contains the keys it should. The new Bitwarden secret's `lastModifiedDate` predates `status.lastSuccessfulSyncTime`, so the delta query is empty and the operator skips. Restarting the operator pod and deleting the materialized Secret do **not** help — the gate runs first. The unstick is to clear the timestamp so the next reconcile does a full pull: `kubectl -n <ns> patch bitwardensecret <name> --subresource=status --type=merge -p '{"status":{"lastSuccessfulSyncTime":null}}'`. Then restart any pod that uses the Secret via `envFrom` so the new env vars actually land.
+- **LiteLLM `pre_call_hook` sees the user-facing model name**: a custom callback's `data["model"]` field is the entry from `proxy_config.model_list` (e.g. `gemma4:e4b`), **not** the resolved `litellm_params.model` (e.g. `ollama_chat/gemma4:e4b`). Gate model-specific logic on the user-facing name. Also, the callback module file is loaded by `importlib.util.spec_from_file_location` *relative to `os.path.dirname(config_file_path)`* — for our Helm-mounted config at `/etc/litellm/config.yaml`, the callback must be mounted at `/etc/litellm/<module>.py`, not in site-packages. See `gitops/manifests/litellm/callbacks-configmap.yaml` (the gemma tool-result rewrite hook) for the canonical wiring.
+- **Gemma 4 + Ollama drops `role:tool` messages**: Ollama's compiled `RENDERER gemma4` / `PARSER gemma4` template silently ignores `role:tool` entries in the prompt. Any agent that depends on the model reading tool output (web_search → weather, etc.) will loop forever — the model re-derives "I should call this tool" because the prior result is invisible. The fix in this cluster is the LiteLLM `pre_call_hook` above; it rewrites `role:tool` → `role:user` and assistant `tool_calls` → assistant text before forwarding to Ollama. Removable once Ollama's gemma renderer learns the `tool` role.
 - **Renovate** (`.github/renovate.json`) tracks chart versions and image tags across both `group_vars/` and `gitops/manifests/`. Expect PRs; review them rather than bumping versions by hand.
