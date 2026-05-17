@@ -39,6 +39,9 @@ spec:
             - name: http
               containerPort: 8642
               protocol: TCP
+            - name: dashboard
+              containerPort: 9119
+              protocol: TCP
           envFrom:
             - secretRef:
                 name: hermes-secrets
@@ -48,6 +51,18 @@ spec:
               value: "true"
             - name: API_SERVER_HOST
               value: "0.0.0.0"
+            # Browser-accessible Dashboard UI on port 9119. TUI=1 adds the
+            # in-browser Chat tab. Exposed via a sister Tailscale Ingress
+            # (hermes-ui.taile9c9c.ts.net) — the tailnet is the auth boundary;
+            # the dashboard itself has no built-in auth.
+            - name: HERMES_DASHBOARD
+              value: "1"
+            - name: HERMES_DASHBOARD_HOST
+              value: "0.0.0.0"
+            - name: HERMES_DASHBOARD_PORT
+              value: "9119"
+            - name: HERMES_DASHBOARD_TUI
+              value: "1"
           volumeMounts:
             - name: data
               mountPath: /opt/data

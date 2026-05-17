@@ -13,3 +13,7 @@ spec:
       port: 80
       targetPort: 8642
       protocol: TCP
+    - name: dashboard
+      port: 8080
+      targetPort: 9119
+      protocol: TCP
