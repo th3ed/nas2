@@ -21,6 +21,13 @@ spec:
       labels:
         app.kubernetes.io/name: searxng
     spec:
+      # Kubernetes auto-injects ${SERVICENAME}_PORT=tcp://<ip>:<port>
+      # legacy service env vars into every pod in the namespace. The
+      # upstream searxng entrypoint reads $SEARXNG_PORT and passes it to
+      # `granian --port`, which then errors on the tcp://... string.
+      # We use DNS (searxng.searxng:8080) for service discovery, so the
+      # legacy env vars are dead weight — disable them to unblock startup.
+      enableServiceLinks: false
       containers:
         - name: searxng
           image: searxng/searxng:latest
