@@ -26,7 +26,10 @@ metadata:
 data:
   gemma_tool_rewrite.py: |
     """Rewrite role:tool messages to role:user for gemma* on Ollama."""
+    import sys
     from litellm.integrations.custom_logger import CustomLogger
+
+    print("[gemma_tool_rewrite] module loaded", flush=True)
 
 
     def _is_gemma_ollama(model: str) -> bool:
@@ -80,13 +83,18 @@ data:
         async def async_pre_call_hook(
             self, user_api_key_dict, cache, data, call_type
         ):
+            model = data.get("model", "")
+            roles = [m.get("role") for m in (data.get("messages") or []) if isinstance(m, dict)]
+            print(f"[gemma_tool_rewrite] hook fired: model={model!r} call_type={call_type!r} roles={roles}", flush=True)
             if call_type not in ("completion", "acompletion"):
                 return data
-            if not _is_gemma_ollama(data.get("model", "")):
+            if not _is_gemma_ollama(model):
+                print(f"[gemma_tool_rewrite] skipped (not gemma ollama)", flush=True)
                 return data
             msgs = data.get("messages")
             if isinstance(msgs, list):
                 data["messages"] = _rewrite_messages(msgs)
+                print(f"[gemma_tool_rewrite] rewrote {len(msgs)} messages", flush=True)
             return data
 
 
