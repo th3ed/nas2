@@ -28,6 +28,7 @@ data:
       model: "gemma4:e4b"
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
+      context_length: 131072
 
     # Cheap fallback if the primary errors / rate-limits.
     fallback_model:
