@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Run every test-*.sh in this directory. Exit 0 only when all pass.
+# Run every test-*.sh in this directory EXCEPT tests/test-paid-*.sh.
+# Exit 0 only when all pass.
 #
 # --retry N   Re-run the suite up to N times (max 3) with 30s backoff between
 #             attempts. Use this when Argo sync timing could cause false failures.
 #             Example: tests/run-all.sh --retry 3
+#
+# Cost contract: this runner is the default for CI and for autonomous agents.
+# It must never incur cloud LLM spend. Any test that calls a paid model must
+# be named test-paid-*.sh and lives in tests/run-paid.sh (human-only).
 
 set -uo pipefail
 
@@ -25,7 +30,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-tests=("$SCRIPT_DIR"/test-*.sh)
+# Free tests only: test-*.sh minus test-paid-*.sh
+tests=()
+for t in "$SCRIPT_DIR"/test-*.sh; do
+    case "$(basename "$t")" in
+        test-paid-*) ;;
+        *) tests+=("$t") ;;
+    esac
+done
 
 _pass=0
 _fail=0

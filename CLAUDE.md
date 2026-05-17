@@ -140,6 +140,15 @@ Use `/tdd-infra <request>` for any change that touches cluster behavior:
 - **New failure pattern** found during debugging → add a regression test before closing the issue.
 - **Feature removed** → delete its test.
 
+### Cost controls for tests
+
+`tests/run-all.sh` must remain zero-cost. It is the default test runner for CI and for the autonomous agent loop; every run costs cluster CPU/GPU only, never cloud LLM spend.
+
+- Tests that call **local-only** models (Ollama via LiteLLM — `gemma4:e4b`, `qwen3-coder-next:latest`, `qwen3:4b-*`) are free → name `tests/test-<name>.sh`.
+- Tests that call **paid cloud** models (`claude-*`, `kimi-*`, `glm-*`, paid `gemini-*`) → name `tests/test-paid-<name>.sh`. These are skipped by `run-all.sh` and only run by `tests/run-paid.sh` (interactive confirm prompt; `--yes-i-will-pay` for scripted use). Human-only — never wired into CI or agents.
+- The naming convention is the only gate. If you're unsure, audit with: any test that does `chat/completions` or `/v1/messages` against a non-local model belongs in `test-paid-*.sh`.
+- The `gemini-*-flash` free-tier IS technically free but counts against per-minute quota; treat as paid for naming purposes to avoid surprises if Google removes free tier.
+
 ### Adding a new application
 
 1. `gitops/apps/<app>.yaml` — copy `gitops/apps/ollama.yaml` as the multi-source Helm template (or `gitops/apps/openclaw.yaml` for plain manifests). Set sync-wave to `20` unless the app has infrastructure dependencies.
