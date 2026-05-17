@@ -110,13 +110,19 @@ proxy_config:
         presidio_language: "en"
         presidio_filter_scope: "both"
         output_parse_pii: True
+        # PERSON and IP_ADDRESS deliberately omitted. PERSON is spaCy-NER
+        # based and false-flags technical tokens at the same score as real
+        # names ("gemma", "Email", "ollama.ollama:11434", identifier
+        # names all return PERSON@0.85), and LiteLLM's reverse-mapping
+        # leaves placeholders embedded in longer tokens unrestored
+        # (gem<PERSON_30>:e4b). IP_ADDRESS is a clean regex but mangles
+        # the cluster/MetalLB/private IPs that fill our infra prompts.
+        # The remaining entries are deterministic regex recognizers.
         pii_entities_config:
-          PERSON: "MASK"
           EMAIL_ADDRESS: "MASK"
           CREDIT_CARD: "MASK"
           US_SSN: "MASK"
           PHONE_NUMBER: "MASK"
-          IP_ADDRESS: "MASK"
           IBAN_CODE: "MASK"
   litellm_settings:
     # gemma_tool_rewrite.handler: pre_call_hook that rewrites role:tool ->

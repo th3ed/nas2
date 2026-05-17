@@ -53,3 +53,22 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 fi
 
 pass "$TITLE: all ${#EXPECTED_MODELS[@]} models present"
+
+# PERSON is spaCy-NER based and false-flags technical tokens ("gemma",
+# "Email", service hostnames, SCREAMING_SNAKE identifiers) at the same
+# score real names get. IP_ADDRESS would mangle cluster/MetalLB/private
+# IPs that fill our infra prompts. Both are deliberately omitted from
+# pii_entities_config — assert they don't drift back in.
+TITLE="litellm: presidio guardrail excludes PERSON and IP_ADDRESS"
+VALUES_FILE="$(dirname "${BASH_SOURCE[0]}")/../gitops/manifests/litellm/values.yaml"
+banned_reintroduced=()
+for entity in PERSON IP_ADDRESS; do
+    if grep -qE "^[[:space:]]+${entity}:[[:space:]]+\"MASK\"" "$VALUES_FILE"; then
+        banned_reintroduced+=("$entity")
+    fi
+done
+if [[ ${#banned_reintroduced[@]} -gt 0 ]]; then
+    fail "$TITLE: re-introduced into pii_entities_config: ${banned_reintroduced[*]}"
+    exit 1
+fi
+pass "$TITLE"
