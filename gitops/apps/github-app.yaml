@@ -1,0 +1,30 @@
+---
+# Holds the GitHub App identity (App ID, Installation ID, private-key PEM)
+# in a Bitwarden-backed Secret. Consumed by short-lived token-minting Jobs
+# in later phases (issue-poster, pr-pusher, pr-reviewer-poster). Sync wave
+# -3 so the Secret exists before any agent Job tries to mount it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: github-app
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: main
+    path: gitops/manifests/github-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: github-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
