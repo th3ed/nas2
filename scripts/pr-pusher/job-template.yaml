@@ -21,15 +21,20 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      # Pod-level: only set fsGroup so the main container can write the
+      # PVC. Per-container securityContext controls user; the apt-install
+      # init container MUST run as root, the main container is non-root.
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 10000
         fsGroup: 10000
         seccompProfile:
           type: RuntimeDefault
       initContainers:
         - name: pip-install
-          image: python:3.12-slim
+          # python:3.12 (non-slim) ships with git 2.47; the slim variant
+          # doesn't. Using the same image for init keeps cold-pull to
+          # one image. Init lays down pip deps into /opt/venv; main
+          # mounts it readOnly.
+          image: python:3.12
           command: ["sh", "-c"]
           args:
             - "python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --quiet pyjwt==2.10.1 cryptography==45.0.4 requests==2.32.4"
@@ -39,27 +44,13 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
             readOnlyRootFilesystem: false
-        - name: apt-install
-          image: python:3.12-slim
-          command: ["sh", "-c"]
-          args:
-            - |
-              apt-get update -qq
-              apt-get install -yqq --no-install-recommends git ca-certificates
-              cp -a /usr/bin/git /opt/bin/git
-              mkdir -p /opt/bin/git-core
-              cp -a /usr/lib/git-core/* /opt/bin/git-core/ 2>/dev/null || true
-          volumeMounts:
-            - { name: tools, mountPath: /opt/bin }
-          securityContext:
-            runAsUser: 0
-            allowPrivilegeEscalation: false
-            capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: false
       containers:
         - name: push
-          image: python:3.12-slim
+          image: python:3.12
           command: ["/opt/venv/bin/python", "/opt/app/push.py"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10000
           env:
             - name: REPO
               value: "th3ed/nas2"
@@ -67,8 +58,6 @@ spec:
               value: "manual"
             - name: WORKSPACE
               value: /workspace
-            - name: PATH
-              value: "/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             - name: HOME
               value: /tmp
           envFrom:
@@ -83,13 +72,11 @@ spec:
             readOnlyRootFilesystem: true
           volumeMounts:
             - { name: venv, mountPath: /opt/venv, readOnly: true }
-            - { name: tools, mountPath: /opt/bin, readOnly: true }
             - { name: app, mountPath: /opt/app, readOnly: true }
             - { name: workspace, mountPath: /workspace }
             - { name: tmp, mountPath: /tmp }
       volumes:
         - { name: venv, emptyDir: {} }
-        - { name: tools, emptyDir: {} }
         - { name: tmp, emptyDir: { sizeLimit: 256Mi } }
         - name: app
           configMap:
