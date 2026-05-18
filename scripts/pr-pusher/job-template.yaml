@@ -1,0 +1,101 @@
+---
+# Manual pr-pusher invocation. Run AFTER dev-agent has produced
+# /workspace/.patch in the agent-workspace-manual PVC.
+#
+#   kubectl delete job pr-pusher-manual -n agents --ignore-not-found
+#   kubectl apply -f scripts/pr-pusher/job-template.yaml
+#   kubectl -n agents logs -f job/pr-pusher-manual
+#
+# Reads .patch from the same PVC dev-agent wrote. Validates scope,
+# mints a 1h GH App token, pushes to `agent/issue-manual`, opens a PR.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pr-pusher-manual
+  namespace: agents
+spec:
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: pip-install
+          image: python:3.12-slim
+          command: ["sh", "-c"]
+          args:
+            - "python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --quiet pyjwt==2.10.1 cryptography==45.0.4 requests==2.32.4"
+          volumeMounts:
+            - { name: venv, mountPath: /opt/venv }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: false
+        - name: apt-install
+          image: python:3.12-slim
+          command: ["sh", "-c"]
+          args:
+            - |
+              apt-get update -qq
+              apt-get install -yqq --no-install-recommends git ca-certificates
+              cp -a /usr/bin/git /opt/bin/git
+              mkdir -p /opt/bin/git-core
+              cp -a /usr/lib/git-core/* /opt/bin/git-core/ 2>/dev/null || true
+          volumeMounts:
+            - { name: tools, mountPath: /opt/bin }
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: false
+      containers:
+        - name: push
+          image: python:3.12-slim
+          command: ["/opt/venv/bin/python", "/opt/app/push.py"]
+          env:
+            - name: REPO
+              value: "th3ed/nas2"
+            - name: ISSUE_NUMBER
+              value: "manual"
+            - name: WORKSPACE
+              value: /workspace
+            - name: PATH
+              value: "/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: github-app-secrets
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: venv, mountPath: /opt/venv, readOnly: true }
+            - { name: tools, mountPath: /opt/bin, readOnly: true }
+            - { name: app, mountPath: /opt/app, readOnly: true }
+            - { name: workspace, mountPath: /workspace }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: venv, emptyDir: {} }
+        - { name: tools, emptyDir: {} }
+        - { name: tmp, emptyDir: { sizeLimit: 256Mi } }
+        - name: app
+          configMap:
+            name: pr-pusher-payload
+            items:
+              - { key: push.py, path: push.py }
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: agent-workspace-manual

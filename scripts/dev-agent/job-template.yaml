@@ -7,7 +7,7 @@
 #       --from-file=issue.md=/path/to/your-issue.md \
 #       --dry-run=client -o yaml | kubectl apply -f -
 #
-#   # 2. Spawn the Job:
+#   # 2. Spawn the Job (will create the PVC on first apply):
 #   kubectl delete job dev-agent-manual -n agents --ignore-not-found
 #   kubectl apply -f scripts/dev-agent/job-template.yaml
 #
@@ -15,10 +15,23 @@
 #   # invocations skip the apt/bun install once we pre-bake the image):
 #   kubectl -n agents logs -f job/dev-agent-manual
 #
+#   # 4. (For pr-pusher integration) the patch lands in the
+#   #   agent-workspace-manual PVC at /workspace/.patch — apply
+#   #   scripts/pr-pusher/job-template.yaml next.
+#
 # This is throwaway — agent-controller will replace this with a
-# templated apply per issue (PVC-backed workspace so pr-pusher can pick
-# up the patch).
-
+# templated apply per issue.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-workspace-manual
+  namespace: agents
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -76,7 +89,8 @@ spec:
               mountPath: /tmp
       volumes:
         - name: workspace
-          emptyDir: { sizeLimit: 1Gi }
+          persistentVolumeClaim:
+            claimName: agent-workspace-manual
         - name: tmp
           emptyDir: { sizeLimit: 512Mi }
         - name: payload

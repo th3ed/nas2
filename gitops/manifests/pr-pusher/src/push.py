@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""pr-pusher — one-shot Job that takes a dev-agent-produced patch,
+validates it, pushes a branch, and opens a PR.
+
+Architectural role: the ONLY identity in the cluster that holds a
+GitHub App token with `contents:write` + `pull_requests:write`. Both
+the dev-agent and the pr-reviewer are credential-free; this Job is
+narrow on purpose (just-in-time token mint, no LLM, no shell-out to
+external content, no interactive prompts).
+
+Trust boundary: this Job reads `/workspace/.patch` from a per-issue
+PVC that was previously written by the dev-agent Job. The dev-agent
+never had a GitHub token; the worst it could have done is craft a
+malicious patch. Defense:
+  - Diff scope cap: <=500 LOC, <=20 files, <=1MB total
+  - Protected-path block: any path in PROTECTED_PATHS_RE → reject
+  - TDD enforcement: the patch MUST touch at least one tests/ file
+  - Conventional-commit subject required
+  - The branch name is `agent/issue-<N>` — always single-author, easy
+    to revoke by deleting the branch
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import jwt
+import requests
+
+LOG = logging.getLogger("pr-pusher")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+GH_APP_ID = os.environ["GH_APP_ID"].strip()
+GH_APP_INSTALLATION_ID = os.environ["GH_APP_INSTALLATION_ID"].strip()
+GH_APP_PRIVATE_KEY = os.environ["GH_APP_PRIVATE_KEY"]
+REPO = os.environ.get("REPO", "th3ed/nas2")
+ISSUE_NUMBER = os.environ["ISSUE_NUMBER"].strip()
+WORKSPACE = Path(os.environ.get("WORKSPACE", "/workspace"))
+PATCH = WORKSPACE / ".patch"
+SUMMARY = WORKSPACE / ".summary"
+
+MAX_LOC = 500
+MAX_FILES = 20
+MAX_BYTES = 1_048_576
+CONVENTIONAL_RE = re.compile(r"^(feat|fix|docs|chore|refactor|test|style|perf|ci|build|revert)(\([\w\-]+\))?: .{1,80}$")
+PROTECTED_PATHS_RE = re.compile(
+    r"^(\.github/|group_vars/|\.vault_pass|playbook\.yml|\.claude/|"
+    r"roles/argocd_bootstrap/|gitops/manifests/(litellm|hermes|sm-operator|gpu-operator|github-app|issue-creator|argocd|metallb|tailscale-operator|alertmanager-shim)/"
+    r"|gitops/manifests/(dev-agent|pr-pusher|pr-reviewer|pr-reviewer-poster|agent-controller)/)"
+)
+
+
+def mint_token() -> str:
+    now = int(time.time())
+    jwt_token = jwt.encode(
+        {"iat": now - 60, "exp": now + 540, "iss": GH_APP_ID},
+        GH_APP_PRIVATE_KEY,
+        algorithm="RS256",
+    )
+    resp = requests.post(
+        f"https://api.github.com/app/installations/{GH_APP_INSTALLATION_ID}/access_tokens",
+        headers={"Authorization": f"Bearer {jwt_token}", "Accept": "application/vnd.github+json"},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()["token"]
+
+
+def run(cmd: list[str], **kw) -> subprocess.CompletedProcess[str]:
+    LOG.info("$ %s", " ".join(cmd))
+    return subprocess.run(cmd, check=True, text=True, capture_output=True, **kw)
+
+
+def validate_patch(patch: str) -> tuple[bool, str]:
+    if len(patch.encode()) > MAX_BYTES:
+        return False, f"patch is {len(patch.encode())} bytes (max {MAX_BYTES})"
+    files = re.findall(r"^diff --git a/(\S+) b/", patch, re.MULTILINE)
+    if len(files) > MAX_FILES:
+        return False, f"patch touches {len(files)} files (max {MAX_FILES})"
+    if not files:
+        return False, "patch touches 0 files"
+    plus_lines = sum(1 for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++"))
+    minus_lines = sum(1 for line in patch.splitlines() if line.startswith("-") and not line.startswith("---"))
+    loc = plus_lines + minus_lines
+    if loc > MAX_LOC:
+        return False, f"patch has {loc} +/- lines (max {MAX_LOC})"
+    if not any(f.startswith("tests/") for f in files):
+        return False, f"TDD: patch must touch at least one tests/ file. Files: {files}"
+    for f in files:
+        if PROTECTED_PATHS_RE.match(f):
+            return False, f"protected path: {f}"
+    LOG.info("patch validated: %d files, %d LOC, %d bytes", len(files), loc, len(patch.encode()))
+    return True, ""
+
+
+def main() -> int:
+    if not PATCH.is_file():
+        LOG.error("FATAL: no patch at %s", PATCH)
+        return 2
+    patch = PATCH.read_text()
+    if not patch.strip():
+        LOG.error("FATAL: patch is empty")
+        return 2
+
+    ok, err = validate_patch(patch)
+    if not ok:
+        LOG.error("FATAL: patch validation failed: %s", err)
+        return 3
+
+    token = mint_token()
+    LOG.info("minted GH App token (ghs_…)")
+
+    branch = f"agent/issue-{ISSUE_NUMBER}"
+    clone_dir = WORKSPACE / "_push_clone"
+    if clone_dir.exists():
+        run(["rm", "-rf", str(clone_dir)])
+    clone_url = f"https://x-access-token:{token}@github.com/{REPO}.git"
+    run(["git", "clone", "--depth", "1", clone_url, str(clone_dir)])
+    run(["git", "-C", str(clone_dir), "config", "user.email", "agent@nas2.local"])
+    run(["git", "-C", str(clone_dir), "config", "user.name", "nas2-dev-agent"])
+    run(["git", "-C", str(clone_dir), "checkout", "-b", branch])
+
+    patch_file = clone_dir / ".incoming.patch"
+    patch_file.write_text(patch)
+    run(["git", "-C", str(clone_dir), "apply", "--whitespace=nowarn", str(patch_file)])
+    patch_file.unlink()
+
+    files = re.findall(r"^diff --git a/(\S+) b/", patch, re.MULTILINE)
+    run(["git", "-C", str(clone_dir), "add", "-A"])
+
+    subject = f"feat(agent): resolve #{ISSUE_NUMBER}"
+    if not CONVENTIONAL_RE.match(subject):
+        LOG.error("FATAL: subject not conventional: %s", subject)
+        return 4
+    body = (
+        f"Resolves #{ISSUE_NUMBER}\n\n"
+        f"Touched files ({len(files)}):\n"
+        + "".join(f"- {f}\n" for f in files)
+        + "\n_Generated by nas2 dev-agent loop. Human review required._\n"
+    )
+    summary = SUMMARY.read_text()[-2000:] if SUMMARY.is_file() else ""
+    if summary:
+        body += f"\n<details><summary>dev-agent summary</summary>\n\n```\n{summary}\n```\n\n</details>\n"
+    run(["git", "-C", str(clone_dir), "commit", "-m", f"{subject}\n\n{body}"])
+    run(["git", "-C", str(clone_dir), "push", "-u", "origin", branch])
+
+    pr = requests.post(
+        f"https://api.github.com/repos/{REPO}/pulls",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        json={
+            "title": subject,
+            "head": branch,
+            "base": "main",
+            "body": body,
+            "draft": False,
+        },
+        timeout=30,
+    )
+    if pr.status_code >= 300:
+        LOG.error("PR creation failed: HTTP %d %s", pr.status_code, pr.text[:500])
+        return 5
+    pr_data = pr.json()
+    LOG.info("opened PR #%d: %s", pr_data["number"], pr_data["html_url"])
+    (WORKSPACE / ".pr").write_text(json.dumps({"number": pr_data["number"], "url": pr_data["html_url"]}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

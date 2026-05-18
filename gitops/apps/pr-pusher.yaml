@@ -1,0 +1,33 @@
+---
+# Persistent infrastructure for the pr-pusher loop: the ConfigMap
+# carrying the push script and the BitwardenSecret holding the GitHub
+# App private key. The Job itself is per-issue ephemeral, rendered by
+# agent-controller (or applied manually via
+# scripts/pr-pusher/job-template.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pr-pusher
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: main
+    path: gitops/manifests/pr-pusher
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agents
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
