@@ -58,6 +58,22 @@ data:
     terminal:
       backend: local
 
+    # Smart approval — agent-generated shell commands flagged as "dangerous"
+    # by Hermes's pattern detector are sent to an aux LLM (compression model =
+    # local gemma4:e4b, free) which judges the COMMAND TEXT ALONE (not the
+    # conversation, so prompt-injection in the inbound payload cannot
+    # manipulate the verdict). Safe → auto-approve. Genuinely dangerous →
+    # auto-deny with hard block. Uncertain → manual prompt (only useful on
+    # interactive sessions; webhook-driven runs without a human consumer
+    # would deadlock here — see Phase 1 lessons).
+    #
+    # Default 'manual' is wrong for webhook-driven agent runs: nobody answers
+    # the prompt, so the agent stalls indefinitely. 'off' is too permissive
+    # for interactive Telegram sessions. 'smart' threads the needle.
+    approvals:
+      mode: smart
+      timeout: 60
+
     # Expose all LiteLLM-proxied models in the Hermes model picker. The custom
     # provider profile has base_url="" in its compiled-in defaults, so fetch_models()
     # returns None and automatic discovery never fires. custom_providers is the
