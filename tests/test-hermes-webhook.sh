@@ -26,7 +26,7 @@ code=$(ssh_kubectl "run --rm -i --restart=Never --image=curlimages/curl:8.10.1 -
     fail "$TITLE: kubectl run failed: $code"
     exit 1
 }
-http_code=$(echo "$code" | head -1 | tr -dc 0-9)
+http_code=$(echo "$code" | grep -oE '^[0-9]{3}' | head -1)
 if [[ "$http_code" != "200" ]]; then
     fail "$TITLE: got HTTP $http_code"
     exit 1
@@ -40,7 +40,7 @@ code=$(ssh_kubectl "run --rm -i --restart=Never --image=curlimages/curl:8.10.1 -
     fail "$TITLE: kubectl run failed: $code"
     exit 1
 }
-http_code=$(echo "$code" | head -1 | tr -dc 0-9)
+http_code=$(echo "$code" | grep -oE '^[0-9]{3}' | head -1)
 if [[ "$http_code" != "401" && "$http_code" != "400" ]]; then
     fail "$TITLE: got HTTP $http_code (expected 401 or 400)"
     exit 1

@@ -57,13 +57,13 @@ if ! echo "$keys" | grep -q "webhook-hmac-secret"; then
 fi
 pass "$TITLE"
 
-TITLE="argocd-notif: BitwardenSecret webhook-hmac is SuccessfullySynced"
-phase=$(ssh_kubectl "get bitwardensecret webhook-hmac -n argocd -o jsonpath='{.status.conditions[?(@.type==\"SuccessfullySynced\")].status}' 2>&1") || {
+TITLE="argocd-notif: BitwardenSecret webhook-hmac is SuccessfulSync"
+phase=$(ssh_kubectl "get bitwardensecret webhook-hmac -n argocd -o jsonpath='{.status.conditions[?(@.type==\"SuccessfulSync\")].status}' 2>&1") || {
     fail "$TITLE: kubectl failed: $phase"
     exit 1
 }
 if [[ "$phase" != "True" ]]; then
-    fail "$TITLE: SuccessfullySynced=$phase (try: kubectl -n argocd patch bitwardensecret webhook-hmac --subresource=status --type=merge -p '{\"status\":{\"lastSuccessfulSyncTime\":null}}')"
+    fail "$TITLE: SuccessfulSync=$phase (try: kubectl -n argocd patch bitwardensecret webhook-hmac --subresource=status --type=merge -p '{\"status\":{\"lastSuccessfulSyncTime\":null}}')"
     exit 1
 fi
 pass "$TITLE"
