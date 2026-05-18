@@ -1,28 +1,24 @@
 ---
-# Manual dev-agent invocation. Edit the ConfigMap data.issue field with
-# the issue body you want resolved, optionally set ISSUE_NUMBER, then:
+# Manual dev-agent invocation. Two-step recipe so the issue ConfigMap
+# isn't clobbered each time the Job is re-applied:
+#
+#   # 1. Create / overwrite the issue body (separate from this file):
+#   kubectl create configmap dev-agent-manual-issue -n agents \
+#       --from-file=issue.md=/path/to/your-issue.md \
+#       --dry-run=client -o yaml | kubectl apply -f -
+#
+#   # 2. Spawn the Job:
+#   kubectl delete job dev-agent-manual -n agents --ignore-not-found
 #   kubectl apply -f scripts/dev-agent/job-template.yaml
-# Watch:
+#
+#   # 3. Watch progress (Pod runs ~3-5 min on first invocation; later
+#   # invocations skip the apt/bun install once we pre-bake the image):
 #   kubectl -n agents logs -f job/dev-agent-manual
-# Get the patch when done:
-#   kubectl -n agents exec deploy/... -- cat /workspace/.patch  # NO — Job, not Deploy
-#   kubectl -n agents debug job/dev-agent-manual ...
 #
 # This is throwaway — agent-controller will replace this with a
-# templated apply per issue.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: dev-agent-manual-issue
-  namespace: agents
-data:
-  issue.md: |
-    # PUT YOUR ISSUE BODY HERE
+# templated apply per issue (PVC-backed workspace so pr-pusher can pick
+# up the patch).
 
-    Replace this ConfigMap with `kubectl create configmap
-    dev-agent-manual-issue -n agents --from-file=issue.md=<path>
-    --dry-run=client -o yaml | kubectl apply -f -`
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -57,6 +53,8 @@ spec:
               value: /opt/issue/issue.md
             - name: ISSUE_NUMBER
               value: "manual"
+            - name: MODEL
+              value: "litellm/qwen3-coder-next:latest"
             - name: HOME
               value: /root
           envFrom:

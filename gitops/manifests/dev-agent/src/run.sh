@@ -105,3 +105,6 @@ if [[ "$patch_lines" -eq 0 ]]; then
     exit 3
 fi
 echo "dev-agent: success — $patch_lines line patch staged at .patch"
+echo "::group:: patch dump"
+cat "$WORKSPACE/.patch"
+echo "::endgroup::"
