@@ -1,0 +1,90 @@
+---
+# Manual dev-agent invocation. Edit the ConfigMap data.issue field with
+# the issue body you want resolved, optionally set ISSUE_NUMBER, then:
+#   kubectl apply -f scripts/dev-agent/job-template.yaml
+# Watch:
+#   kubectl -n agents logs -f job/dev-agent-manual
+# Get the patch when done:
+#   kubectl -n agents exec deploy/... -- cat /workspace/.patch  # NO — Job, not Deploy
+#   kubectl -n agents debug job/dev-agent-manual ...
+#
+# This is throwaway — agent-controller will replace this with a
+# templated apply per issue.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dev-agent-manual-issue
+  namespace: agents
+data:
+  issue.md: |
+    # PUT YOUR ISSUE BODY HERE
+
+    Replace this ConfigMap with `kubectl create configmap
+    dev-agent-manual-issue -n agents --from-file=issue.md=<path>
+    --dry-run=client -o yaml | kubectl apply -f -`
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dev-agent-manual
+  namespace: agents
+spec:
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        # bun JSC GC fails (exit 133) under K8s default AppArmor — see
+        # memory `project_opencode_apparmor`.
+        container.apparmor.security.beta.kubernetes.io/agent: unconfined
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dev-agent
+      automountServiceAccountToken: false
+      # MVP: runs as root so `apt-get install` + `bun install -g
+      # opencode-ai` can write to /usr/local. Pre-baked image (follow-up)
+      # will let us drop back to non-root.
+      securityContext: {}
+      containers:
+        - name: agent
+          image: oven/bun:1-debian
+          command: ["bash", "/opt/payload/run.sh"]
+          env:
+            - name: OPENAI_BASE_URL
+              value: "http://litellm.litellm:4000/v1"
+            - name: ISSUE_BODY_PATH
+              value: /opt/issue/issue.md
+            - name: ISSUE_NUMBER
+              value: "manual"
+            - name: HOME
+              value: /root
+          envFrom:
+            - secretRef:
+                name: litellm-master
+          resources:
+            requests: { cpu: 200m, memory: 1Gi }
+            limits: { cpu: 2, memory: 4Gi }
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: payload
+              mountPath: /opt/payload
+              readOnly: true
+            - name: issue
+              mountPath: /opt/issue
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: workspace
+          emptyDir: { sizeLimit: 1Gi }
+        - name: tmp
+          emptyDir: { sizeLimit: 512Mi }
+        - name: payload
+          configMap:
+            name: dev-agent-payload
+            defaultMode: 0755
+        - name: issue
+          configMap:
+            name: dev-agent-manual-issue

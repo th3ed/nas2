@@ -16,3 +16,4 @@ bitwarden_namespaces:
   - hermes
   - github-app
   - argocd
+  - agents

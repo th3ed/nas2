@@ -1,0 +1,12 @@
+---
+# Home for ephemeral dev-agent + pr-reviewer Jobs. The agent-controller
+# (not yet built) lives here too. PVCs per issue, no GH credentials, no
+# GPU. NetworkPolicy will be added once dev-agent behavior is observed
+# in this namespace (permissive-first, lock-down-from-observation per
+# Phase 2 plan).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agents
+  labels:
+    app.kubernetes.io/name: agents
