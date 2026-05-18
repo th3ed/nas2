@@ -55,6 +55,11 @@ else
     git fetch --depth 1 origin main && git reset --hard origin/main
 fi
 cp /opt/payload/opencode.json ./opencode.json
+# opencode.json is wrapper plumbing, not a project file — keep it out
+# of the diff so pr-pusher sees only the agent's intended changes.
+mkdir -p .git/info
+grep -qxF "opencode.json" .git/info/exclude 2>/dev/null || echo "opencode.json" >> .git/info/exclude
+grep -qxF ".opencode.log" .git/info/exclude 2>/dev/null || echo ".opencode.log" >> .git/info/exclude
 echo "head: $(git rev-parse HEAD)"
 echo "::endgroup::"
 
