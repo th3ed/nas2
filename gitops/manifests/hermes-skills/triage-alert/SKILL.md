@@ -62,10 +62,10 @@ If opening an issue, POST a JSON body to issue-creator matching this exact shape
 
 ## How to actually send
 
-Two-step: write the JSON to a file, then run post-issue.py against that file. **Do NOT pipe `cat` into `python3`** — Hermes's Tirith security scanner blocks `cat ... | python3` patterns (MITRE T1059.004) and the agent run will stall waiting for human approval that never comes in webhook contexts.
+You MUST issue this as ONE terminal command that chains the file-write and the script invocation with `&&`. If you split it across two terminal calls, the second won't fire and the issue will never reach GitHub. Use this exact shape:
 
 ```bash
-cat > /tmp/issue.json <<'JSON'
+cat > /tmp/issue.json <<'JSON' && python3 /opt/data/agent-loop/bin/post-issue.py /tmp/issue.json
 {
   "title": "...",
   "body": "...",
@@ -73,10 +73,11 @@ cat > /tmp/issue.json <<'JSON'
   "dedupe_key": "..."
 }
 JSON
-python3 /opt/data/agent-loop/bin/post-issue.py /tmp/issue.json
 ```
 
-The script will print the response. `{"action":"created","issue":N}` means a new issue was opened. `{"action":"bumped","issue":N}` means an existing open issue got a "still firing" comment instead — that's the dedupe working; do not treat it as failure. `HTTP 400` means your payload was rejected (you'll see why); fix and retry once, then give up.
+The `&&` chains write + read in a single terminal call. **Do NOT pipe `cat` into `python3`** (`cat … | python3 …`) — Hermes's Tirith scanner blocks that pattern (MITRE T1059.004) and the run will stall waiting for approval that never comes in webhook contexts.
+
+The script will print the response. `{"action":"created","issue":N}` means a new issue was opened — use that N in your reply. `{"action":"bumped","issue":N}` means an existing open issue got a "still firing" comment instead — that's the dedupe working; report the bumped issue number. `HTTP 400` means your payload was rejected (you'll see why); fix and retry once, then give up.
 
 ## After you POST
 

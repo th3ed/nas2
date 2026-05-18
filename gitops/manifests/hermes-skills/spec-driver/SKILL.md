@@ -57,10 +57,10 @@ You are talking to **the repo owner** (the human who runs nas2). They have a fea
 
 ## How to POST
 
-Two-step: write the JSON to a file, then run post-issue.py against that file. **Do NOT pipe `cat` into `python3`** — Hermes's Tirith security scanner blocks that pattern.
+ONE terminal command that chains write + read with `&&`. Do NOT split into two terminal calls — the second won't fire. Do NOT pipe `cat` into `python3` — Tirith blocks that pattern.
 
 ```bash
-cat > /tmp/issue.json <<'JSON'
+cat > /tmp/issue.json <<'JSON' && python3 /opt/data/agent-loop/bin/post-issue.py /tmp/issue.json
 {
   "title": "...",
   "body": "...",
@@ -68,8 +68,9 @@ cat > /tmp/issue.json <<'JSON'
   "dedupe_key": "spec:..."
 }
 JSON
-python3 /opt/data/agent-loop/bin/post-issue.py /tmp/issue.json
 ```
+
+Use the issue number from the `{"action":"created","issue":N}` response in your reply.
 
 Reply with the issue number link only: `Filed: th3ed/nas2#N`. The dev-agent loop will pick it up on its next poll.
 
