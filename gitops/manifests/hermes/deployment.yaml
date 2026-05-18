@@ -112,6 +112,24 @@ spec:
             # draft issues to the in-cluster issue-creator service.
             - name: ISSUE_CREATOR_URL
               value: http://issue-creator.github-app:80/issues
+            # Webhook platform env overrides — Hermes only injects the
+            # global webhook secret from config when WEBHOOK_ENABLED is
+            # truthy in env (see gateway/config.py ~line 1499). The
+            # config.yaml platforms.webhook.extra.secret field is NOT
+            # ${VAR}-interpolated, so we MUST supply the secret via env.
+            - name: WEBHOOK_ENABLED
+              value: "true"
+            - name: WEBHOOK_PORT
+              value: "8644"
+            # Alias: post-issue.py + the global webhook adapter both
+            # consume the same value. We keep the more descriptive
+            # WEBHOOK_HMAC_SECRET from envFrom (Bitwarden-mapped) and
+            # surface it as WEBHOOK_SECRET for the webhook adapter.
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webhook-hmac
+                  key: WEBHOOK_HMAC_SECRET
           volumeMounts:
             - name: data
               mountPath: /opt/data

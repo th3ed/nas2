@@ -104,8 +104,13 @@ data:
         extra:
           host: "0.0.0.0"
           port: 8644
-          # Global secret used when a route omits its own `secret` field.
-          secret: ${WEBHOOK_HMAC_SECRET}
+          # NOTE: the global HMAC secret is NOT set here. Hermes's
+          # gateway/config.py only interpolates ${VAR} in some fields
+          # (model.api_key, custom_providers.api_key) — platforms.webhook
+          # is not on that list, so any value here would be used literally.
+          # The env-var override path (`if WEBHOOK_ENABLED: ... secret =
+          # os.getenv("WEBHOOK_SECRET")`) is the canonical place to
+          # configure this — see env block in deployment.yaml.
           max_body_bytes: 1048576
           routes:
             alertmanager:
