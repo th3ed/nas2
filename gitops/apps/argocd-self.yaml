@@ -23,6 +23,69 @@ spec:
           server:
             extraArgs:
               - --insecure
+          notifications:
+            enabled: true
+            # The webhook-hmac BitwardenSecret in argocd ns materializes
+            # argocd-notifications-secret directly. Disable the chart's
+            # default empty Secret to avoid ownership flap with sm-operator.
+            secret:
+              create: false
+            notifiers:
+              service.webhook.hermes: |
+                url: http://hermes-webhook.hermes:8644/webhooks/argocd
+                headers:
+                  - name: X-Gitlab-Token
+                    value: $webhook-hmac-secret
+                  - name: Content-Type
+                    value: application/json
+            # Templates render the body Hermes's triage-alert skill consumes.
+            # Keep them small + structured — payload becomes {__raw__} in the
+            # skill's prompt and the LLM reads it as JSON.
+            templates:
+              template.app-health-degraded: |
+                webhook:
+                  hermes:
+                    method: POST
+                    body: |
+                      {
+                        "event": "app-health-degraded",
+                        "app": "{{.app.metadata.name}}",
+                        "namespace": "{{.app.metadata.namespace}}",
+                        "health": "{{.app.status.health.status}}",
+                        "sync": "{{.app.status.sync.status}}",
+                        "message": {{toJson .app.status.health.message}},
+                        "operationState": {{toJson .app.status.operationState.message}}
+                      }
+              template.app-sync-failed: |
+                webhook:
+                  hermes:
+                    method: POST
+                    body: |
+                      {
+                        "event": "app-sync-failed",
+                        "app": "{{.app.metadata.name}}",
+                        "namespace": "{{.app.metadata.namespace}}",
+                        "sync": "{{.app.status.sync.status}}",
+                        "message": {{toJson .app.status.operationState.message}}
+                      }
+            triggers:
+              trigger.on-health-degraded: |
+                - description: Application health is Degraded
+                  send: [app-health-degraded]
+                  when: app.status.health.status == 'Degraded'
+              trigger.on-sync-failed: |
+                - description: Application sync operation failed
+                  send: [app-sync-failed]
+                  when: app.status.operationState.phase in ['Error', 'Failed']
+            # Default subscriptions apply to every Application that doesn't
+            # opt out via annotation. Both triggers route to the hermes
+            # service defined above.
+            subscriptions:
+              - recipients:
+                  - webhook:hermes
+                triggers:
+                  - on-health-degraded
+                  - on-sync-failed
     - repoURL: https://github.com/th3ed/nas2.git
       targetRevision: main
       path: gitops/manifests/argocd
