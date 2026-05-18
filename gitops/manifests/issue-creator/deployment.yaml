@@ -28,7 +28,7 @@ spec:
         # mounts the same emptyDir at /opt/venv and uses its bin/python.
         # Init container runs once per pod start (~3-5s cold).
         - name: pip-install
-          image: python:3.12-slim@sha256:c2c92bff31c8ad44eda7f9e4ca21db5d6d7ad96bd31fef4ed62baaf0d3b54fea
+          image: python:3.12-slim
           command: ["sh", "-c"]
           args:
             - "python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --quiet pyjwt==2.10.1 cryptography==45.0.4 requests==2.32.4"
@@ -42,7 +42,7 @@ spec:
             readOnlyRootFilesystem: false
       containers:
         - name: issue-creator
-          image: python:3.12-slim@sha256:c2c92bff31c8ad44eda7f9e4ca21db5d6d7ad96bd31fef4ed62baaf0d3b54fea
+          image: python:3.12-slim
           command: ["/opt/venv/bin/python", "/opt/app/app.py"]
           env:
             - name: REPO
