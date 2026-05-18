@@ -85,3 +85,50 @@ data:
     # reads from the envFrom-injected hermes-secrets Secret. Long-polling
     # mode — no webhook needed; the Tailscale Ingress only fronts the
     # OpenAI-compatible API server on port 8642.
+
+    # Webhook platform — the agent-loop entry point. External signals
+    # (Alertmanager, Argo CD Notifications, etc.) POST signed payloads
+    # to /webhooks/<route>. The webhook adapter validates HMAC,
+    # renders the prompt with the payload, loads the named skill(s)
+    # into the system prompt, and runs the agent. Routes are declarative
+    # here; alternatively `hermes webhook subscribe` writes to
+    # /opt/data/webhook_subscriptions.json and is hot-reloaded — we use
+    # config.yaml routes exclusively to keep agent-loop wiring in git.
+    #
+    # WEBHOOK_HMAC_SECRET is injected by envFrom from the webhook-hmac
+    # Secret (Bitwarden-backed). All routes share one secret for v1; per-
+    # route secrets are an easy follow-up if a leak ever happens.
+    platforms:
+      webhook:
+        enabled: true
+        extra:
+          host: "0.0.0.0"
+          port: 8644
+          # Global secret used when a route omits its own `secret` field.
+          secret: ${WEBHOOK_HMAC_SECRET}
+          max_body_bytes: 1048576
+          routes:
+            alertmanager:
+              description: "Prometheus Alertmanager firing/resolved webhook → triage-alert skill"
+              prompt: |
+                <UNTRUSTED>
+                Prometheus Alertmanager webhook payload:
+                {__raw__}
+                </UNTRUSTED>
+
+                Triage this signal per the triage-alert skill instructions.
+                Use a dedupe_key shaped like `alertmanager:<alertname>:<scope>`.
+              skills: ["triage-alert"]
+              deliver: log
+            argocd:
+              description: "Argo CD Notifications app health/sync change → triage-alert skill"
+              prompt: |
+                <UNTRUSTED>
+                Argo CD Notifications webhook payload:
+                {__raw__}
+                </UNTRUSTED>
+
+                Triage this signal per the triage-alert skill instructions.
+                Use a dedupe_key shaped like `argocd:<application>:<condition>`.
+              skills: ["triage-alert"]
+              deliver: log

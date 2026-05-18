@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: issue-creator
+  namespace: github-app
+  labels:
+    app.kubernetes.io/name: issue-creator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: issue-creator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: issue-creator
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Install python deps into a writable layer. The runtime container
+        # mounts the same emptyDir at /opt/venv and uses its bin/python.
+        # Init container runs once per pod start (~3-5s cold).
+        - name: pip-install
+          image: python:3.12-slim@sha256:c2c92bff31c8ad44eda7f9e4ca21db5d6d7ad96bd31fef4ed62baaf0d3b54fea
+          command: ["sh", "-c"]
+          args:
+            - "python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --quiet pyjwt==2.10.1 cryptography==45.0.4 requests==2.32.4"
+          volumeMounts:
+            - name: venv
+              mountPath: /opt/venv
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false
+      containers:
+        - name: issue-creator
+          image: python:3.12-slim@sha256:c2c92bff31c8ad44eda7f9e4ca21db5d6d7ad96bd31fef4ed62baaf0d3b54fea
+          command: ["/opt/venv/bin/python", "/opt/app/app.py"]
+          env:
+            - name: REPO
+              value: "th3ed/nas2"
+            - name: PORT
+              value: "8080"
+          envFrom:
+            - secretRef:
+                name: github-app-secrets
+            - secretRef:
+                name: webhook-hmac
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: venv
+              mountPath: /opt/venv
+              readOnly: true
+            - name: app
+              mountPath: /opt/app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: venv
+          emptyDir: {}
+        - name: app
+          configMap:
+            name: issue-creator-src
+            items:
+              - key: app.py
+                path: app.py
+        - name: tmp
+          emptyDir: {}
