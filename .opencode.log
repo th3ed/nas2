@@ -1,0 +1,46 @@
+Performing one time database migration, may take a few minutes...
+sqlite-migration:done
+Database migration complete.
+[0m
+> build · qwen3-coder-next:latest
+[0m
+[0m→ [0mRead tests
+I'll create the test file `tests/test-phase2-e2e.sh` with the exact content specified.
+[0m
+[0m← [0mWrite tests/test-phase2-e2e.sh
+Wrote file successfully.
+[0m
+[0m$ [0mcat << 'EOF' > /workspace/tests/test-phase2-e2e.sh
+#!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+pass "phase2-e2e: dev-agent and pr-pusher round-tripped"
+EOF
+chmod +x /workspace/tests/test-phase2-e2e.sh
+(no output)
+[0m
+[0m$ [0mchmod +x /workspace/tests/test-phase2-e2e.sh
+(no output)
+[0m
+[0m← [0mWrite tests/test-phase2-e2e.sh
+Wrote file successfully.
+[0m
+[0m✗ [0mWrite tests/test-phase2-e2e.sh failed
+[91m[1mError: [0mThe write tool was called with invalid arguments: SchemaError(Missing key
+  at ["content"]).
+Please rewrite the input so it satisfies the expected schema.
+[0m
+[0m← [0mWrite tests/test-phase2-e2e.sh
+Wrote file successfully.
+[0m
+[0m← [0mWrite tests/test-phase2-e2e.sh
+Wrote file successfully.
+[0m
+[0m← [0mWrite tests/test-phase2-e2e.sh
+Wrote file successfully.
+[0m
+[0m$ [0mcat /workspace/tests/test-phase2-e2e.sh
+#!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+pass "phase2-e2e: dev-agent and pr-pusher round-tripped"
+[0m
+Created `tests/test-phase2-e2e.sh` with the exact content and made it executable.
