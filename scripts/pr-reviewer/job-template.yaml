@@ -1,0 +1,108 @@
+---
+# Manual pr-reviewer invocation. Three-step recipe so the PR-data
+# ConfigMap isn't clobbered each time the Job is re-applied:
+#
+#   # 1. Stage the review inputs in a directory:
+#   mkdir -p /tmp/pr-review
+#   gh pr diff <PR>         > /tmp/pr-review/diff.patch
+#   gh pr view <PR> --json title,body --template '{{.title}}{{"\n\n"}}{{.body}}' \
+#                            > /tmp/pr-review/pr.md
+#   gh issue view <ISSUE> --json title,body --template '{{.title}}{{"\n\n"}}{{.body}}' \
+#                            > /tmp/pr-review/issue.md
+#   # 2. Create the ConfigMap with all three files:
+#   kubectl create configmap pr-reviewer-manual-pr-data -n agents \
+#       --from-file=diff.patch=/tmp/pr-review/diff.patch \
+#       --from-file=pr.md=/tmp/pr-review/pr.md \
+#       --from-file=issue.md=/tmp/pr-review/issue.md \
+#       --dry-run=client -o yaml | kubectl apply -f -
+#   # 3. Spawn the Job (will create the PVC on first apply):
+#   kubectl delete job pr-reviewer-manual -n agents --ignore-not-found
+#   kubectl apply -f scripts/pr-reviewer/job-template.yaml
+#   kubectl -n agents logs -f job/pr-reviewer-manual
+#   # On success: /workspace/.review.json in the PVC contains the verdict;
+#   # apply scripts/pr-reviewer-poster/job-template.yaml next.
+#
+# This is throwaway — agent-controller will replace this with a
+# templated apply per PR event.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pr-reviewer-workspace-manual
+  namespace: agents
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pr-reviewer-manual
+  namespace: agents
+spec:
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        # bun JSC GC fails (exit 133) under K8s default AppArmor — see
+        # memory `project_opencode_apparmor`.
+        container.apparmor.security.beta.kubernetes.io/reviewer: unconfined
+    spec:
+      restartPolicy: Never
+      serviceAccountName: dev-agent
+      automountServiceAccountToken: false
+      # MVP: runs as root so `apt-get install` + `bun install -g
+      # opencode-ai` can write to /usr/local. Pre-baked image (follow-up)
+      # will let us drop back to non-root.
+      securityContext: {}
+      containers:
+        - name: reviewer
+          image: oven/bun:1-debian
+          command: ["bash", "/opt/payload/run.sh"]
+          env:
+            - name: OPENAI_BASE_URL
+              value: "http://litellm.litellm:4000/v1"
+            - name: PR_DATA_PATH
+              value: /opt/pr-data
+            - name: PR_NUMBER
+              value: "manual"
+            # Two-key principle: reviewer uses a DIFFERENT model from
+            # the dev-agent default (qwen3-coder-next). Defaults to
+            # gemma4:e4b — fast, low VRAM, distinct blind-spot profile.
+            - name: MODEL
+              value: "litellm/gemma4:e4b"
+            - name: HOME
+              value: /root
+          envFrom:
+            - secretRef:
+                name: litellm-master
+          resources:
+            requests: { cpu: 200m, memory: 1Gi }
+            limits: { cpu: 2, memory: 4Gi }
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: payload
+              mountPath: /opt/payload
+              readOnly: true
+            - name: pr-data
+              mountPath: /opt/pr-data
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: pr-reviewer-workspace-manual
+        - name: tmp
+          emptyDir: { sizeLimit: 512Mi }
+        - name: payload
+          configMap:
+            name: pr-reviewer-payload
+            defaultMode: 0755
+        - name: pr-data
+          configMap:
+            name: pr-reviewer-manual-pr-data
