@@ -1,0 +1,85 @@
+---
+# Manual pr-reviewer-poster invocation. Run AFTER pr-reviewer has
+# produced /workspace/.review.json in pr-reviewer-workspace-manual.
+#
+#   kubectl delete job pr-reviewer-poster-manual -n agents --ignore-not-found
+#   # Set PR_NUMBER below to the PR you want to review, then:
+#   kubectl apply -f scripts/pr-reviewer-poster/job-template.yaml
+#   kubectl -n agents logs -f job/pr-reviewer-poster-manual
+#
+# Reads .review.json from the same PVC pr-reviewer wrote. Validates
+# the verdict shape, mints a 1h GH App token, POSTs to /reviews.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pr-reviewer-poster-manual
+  namespace: agents
+spec:
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 300
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: pip-install
+          # python:3.12 (non-slim) ships with git 2.47; we don't need git
+          # here but using the same image as pr-pusher keeps cold-pull to
+          # one image.
+          image: python:3.12
+          command: ["sh", "-c"]
+          args:
+            - "python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --quiet pyjwt==2.10.1 cryptography==45.0.4 requests==2.32.4"
+          volumeMounts:
+            - { name: venv, mountPath: /opt/venv }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: false
+      containers:
+        - name: post
+          image: python:3.12
+          command: ["/opt/venv/bin/python", "/opt/app/post.py"]
+          env:
+            - name: REPO
+              value: "th3ed/nas2"
+            # Replace this with the PR you're reviewing before apply.
+            - name: PR_NUMBER
+              value: "4"
+            - name: WORKSPACE
+              value: /workspace
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: github-app-secrets
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: venv, mountPath: /opt/venv, readOnly: true }
+            - { name: app, mountPath: /opt/app, readOnly: true }
+            - { name: workspace, mountPath: /workspace }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: venv, emptyDir: {} }
+        - { name: tmp, emptyDir: { sizeLimit: 256Mi } }
+        - name: app
+          configMap:
+            name: pr-reviewer-poster-payload
+            items:
+              - { key: post.py, path: post.py }
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: pr-reviewer-workspace-manual

@@ -1,0 +1,38 @@
+---
+# Persistent infrastructure for the pr-reviewer-poster loop: the
+# payload ConfigMap. The github-app-secrets BitwardenSecret is already
+# provisioned by the pr-pusher Application (same agents namespace,
+# same Bitwarden entries) — both token-holding Jobs read from one
+# Secret since only one GitHub App exists for nas2.
+#
+# The pr-reviewer-poster Job spec itself is NOT in this manifest set —
+# it's a per-review ephemeral resource that the agent-controller
+# renders and applies at runtime. For manual testing, use the template
+# at scripts/pr-reviewer-poster/job-template.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pr-reviewer-poster
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: main
+    path: gitops/manifests/pr-reviewer-poster
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agents
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
