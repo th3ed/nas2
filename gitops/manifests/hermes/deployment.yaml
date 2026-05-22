@@ -29,6 +29,31 @@ spec:
       securityContext:
         fsGroup: 10000
       initContainers:
+        - name: install-freshrss-skill
+          # Clones the FreshRSS skill into the Hermes skills directory.
+          # The skill is available at /data/skills/freshrss/ (= /opt/data/skills/
+          # from the main container's perspective). If the remote repo is
+          # unreachable (e.g., not yet pushed), the container exits 0 so it
+          # doesn't block pod startup.
+          image: alpine/git:2.45.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /data/skills
+              if [ -d /data/skills/freshrss/.git ]; then
+                git -C /data/skills/freshrss pull --ff-only 2>/dev/null || true
+              else
+                rm -rf /data/skills/freshrss
+                if git clone --depth 1 https://github.com/th3ed/freshrss_hermes_skill.git /tmp/skill 2>/dev/null; then
+                  mv /tmp/skill/freshrss /data/skills/freshrss
+                  rm -rf /tmp/skill
+                else
+                  echo "WARN: freshrss skill repo not available yet, skipping"
+                fi
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: /data
         - name: patch-prompt-builder
           # Same digest as the main container — ensures we copy and patch the
           # correct version of prompt_builder.py. Update both image fields
