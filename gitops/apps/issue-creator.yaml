@@ -1,0 +1,32 @@
+---
+# Tiny HTTP service in github-app namespace that owns the GitHub App
+# private key, mints 1h installation tokens on demand, and exposes the
+# single operation `POST /issues` consumed by Hermes (via the agent-loop
+# triage-alert and spec-driver skills).
+#
+# Sync wave 0 — after github-app (-3) and before agent runtimes (20).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: issue-creator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: main
+    path: gitops/manifests/issue-creator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: github-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

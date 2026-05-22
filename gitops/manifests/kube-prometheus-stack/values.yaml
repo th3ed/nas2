@@ -98,3 +98,24 @@ alertmanager:
           resources:
             requests:
               storage: 5Gi
+  # Send all firing alerts to alertmanager-shim, which HMAC-signs them
+  # and forwards to hermes-webhook. Hermes's triage-alert skill decides
+  # whether to open a GitHub issue. Watchdog + InfoInhibitor are designed
+  # to be discarded — keep them on the null receiver.
+  config:
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "hermes-shim"
+      routes:
+        - receiver: "null"
+          matchers:
+            - alertname =~ "InfoInhibitor|Watchdog"
+    receivers:
+      - name: "null"
+      - name: "hermes-shim"
+        webhook_configs:
+          - url: "http://alertmanager-shim.monitoring:8080/alert"
+            send_resolved: true

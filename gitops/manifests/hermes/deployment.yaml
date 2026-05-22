@@ -68,9 +68,22 @@ spec:
             - name: dashboard
               containerPort: 9119
               protocol: TCP
+            # Webhook platform (platforms.webhook in config.yaml). In-cluster
+            # only — fronted by the `hermes-webhook` Service, no Tailscale
+            # Ingress. Receives signed POSTs from Alertmanager, Argo CD
+            # Notifications, and (future) the test-runner cron.
+            - name: webhook
+              containerPort: 8644
+              protocol: TCP
           envFrom:
             - secretRef:
                 name: hermes-secrets
+                optional: false
+            # Adds WEBHOOK_HMAC_SECRET (shared with issue-creator and the
+            # external signal sources) so config.yaml's platforms.webhook
+            # routes and the post-issue.py helper can sign/verify.
+            - secretRef:
+                name: webhook-hmac
                 optional: false
           env:
             - name: API_SERVER_ENABLED
@@ -95,6 +108,28 @@ spec:
             # key is required for the SearXNG backend.
             - name: SEARXNG_URL
               value: http://searxng.searxng:8080
+            # Target the agent-loop helper post-issue.py uses to forward
+            # draft issues to the in-cluster issue-creator service.
+            - name: ISSUE_CREATOR_URL
+              value: http://issue-creator.github-app:80/issues
+            # Webhook platform env overrides — Hermes only injects the
+            # global webhook secret from config when WEBHOOK_ENABLED is
+            # truthy in env (see gateway/config.py ~line 1499). The
+            # config.yaml platforms.webhook.extra.secret field is NOT
+            # ${VAR}-interpolated, so we MUST supply the secret via env.
+            - name: WEBHOOK_ENABLED
+              value: "true"
+            - name: WEBHOOK_PORT
+              value: "8644"
+            # Alias: post-issue.py + the global webhook adapter both
+            # consume the same value. We keep the more descriptive
+            # WEBHOOK_HMAC_SECRET from envFrom (Bitwarden-mapped) and
+            # surface it as WEBHOOK_SECRET for the webhook adapter.
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webhook-hmac
+                  key: WEBHOOK_HMAC_SECRET
           volumeMounts:
             - name: data
               mountPath: /opt/data
@@ -106,6 +141,21 @@ spec:
               mountPath: /opt/hermes/agent/prompt_builder.py
               subPath: prompt_builder.py
               readOnly: true
+            # Agent-loop skills + helper script. SubPath mounts each file
+            # into the canonical Hermes layout. Pod restart picks up edits
+            # (subPath mounts are frozen at pod-start time).
+            - name: agent-loop-skills
+              mountPath: /opt/data/skills/agent-loop/triage-alert/SKILL.md
+              subPath: triage-alert.SKILL.md
+              readOnly: true
+            - name: agent-loop-skills
+              mountPath: /opt/data/skills/agent-loop/spec-driver/SKILL.md
+              subPath: spec-driver.SKILL.md
+              readOnly: true
+            - name: agent-loop-skills
+              mountPath: /opt/data/agent-loop/bin/post-issue.py
+              subPath: post-issue.py
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -115,3 +165,6 @@ spec:
             name: hermes-app-config
         - name: prompt-builder-patch
           emptyDir: {}
+        - name: agent-loop-skills
+          configMap:
+            name: hermes-agent-loop-skills

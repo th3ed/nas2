@@ -1,0 +1,25 @@
+---
+# In-cluster only Service for the Hermes webhook platform on port 8644.
+# Receives POSTs from Alertmanager, Argo CD Notifications, and (future)
+# test-runner cron. Deliberately NOT fronted by a Tailscale Ingress —
+# external sources reach it via in-cluster Service DNS only (alertmanager
+# and argo run in this cluster). If we ever need an external webhook
+# producer (e.g. GitHub webhooks → Hermes), add a separate Tailscale
+# Ingress at that point.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-webhook
+  namespace: hermes
+  labels:
+    app.kubernetes.io/name: hermes
+    app.kubernetes.io/component: webhook
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hermes
+  ports:
+    - name: webhook
+      port: 8644
+      targetPort: webhook
+      protocol: TCP

@@ -1,0 +1,76 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager-shim
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager-shim
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager-shim
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertmanager-shim
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alertmanager-shim
+          image: python:3.12-slim
+          command: ["python3", "/opt/app/app.py"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: TARGET_URL
+              value: "http://hermes-webhook.hermes:8644/webhooks/alertmanager"
+          envFrom:
+            - secretRef:
+                name: webhook-hmac
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: app
+              mountPath: /opt/app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app
+          configMap:
+            name: alertmanager-shim-src
+            items:
+              - key: app.py
+                path: app.py
+        - name: tmp
+          emptyDir: {}
