@@ -1,5 +1,10 @@
 # AgentRegistry chart overrides. See chart/values.yaml for the full schema.
-# Pin the image to the chart's appVersion (v0.3.3) by leaving image.tag empty.
+# Upstream v0.3.3 chart's values.yaml pins image.tag=0.2.1 (out-of-sync
+# with appVersion: 0.3.3 — likely an upstream release glitch); override
+# to v0.3.3 so we run the same server version as the chart claims.
+# Re-check on every chart bump and drop this override if upstream fixes it.
+image:
+  tag: v0.3.3
 
 # JWT signing key — pulled from Bitwarden SM via agentregistry-jwt
 # BitwardenSecret. Required by the chart's validate.yaml (NOTES.txt fail()
@@ -16,8 +21,21 @@ service:
 
 # Bundled Postgres on a 5 Gi PVC. Fine for a single-user homelab; switch
 # to an external Postgres URL if state ever needs to outlive the cluster.
+# Server v0.3.3 requires pgvector — its initial schema migration runs
+# `CREATE EXTENSION vector` unconditionally, so the chart's plain
+# postgres:18 default crashes the pod on first start. Swap in
+# pgvector/pgvector:pg18 (drop-in replacement: same POSTGRES_PASSWORD
+# wiring, adds the pgvector .so on disk so the extension is loadable)
+# and set vectorEnabled=true so the server's embeddings code path is
+# enabled to match the schema.
 database:
   postgres:
+    vectorEnabled: true
     bundled:
       enabled: true
       storage: 5Gi
+      image:
+        registry: docker.io
+        repository: pgvector
+        name: pgvector
+        tag: pg18
