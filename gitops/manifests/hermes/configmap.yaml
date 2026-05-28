@@ -80,6 +80,98 @@ data:
           - "gemini-2.5-pro"
           - "gemini-2.0-flash"
 
+    # Prune the upstream-bundled skill set. Hermes ships ~82 skills in its
+    # image (skills/<category>/<name>/SKILL.md) and auto-indexes every one
+    # into the system prompt at every turn — ~18k tokens before we add a
+    # single message. Per agent/skill_utils.py:175 (get_disabled_skill_names),
+    # any name listed under skills.disabled is filtered out at three sites
+    # in prompt_builder.py (lines 1048, 1073, 1128) when building the
+    # skills section.
+    #
+    # Keep: 28 skills covering email (himalaya), GitHub workflow, MCP
+    # authoring, PDF/OCR, research (arxiv/llm-wiki/research-paper-writing),
+    # red-teaming (godmode), opencode, webhook-subscriptions, and the full
+    # software-development category (TDD, debugging, planning).
+    # Disable: 54 skills covering Apple, gaming, smart-home, creative/visual
+    # generation, media streaming, productivity SaaS (notion/linear/airtable/
+    # google-workspace/etc.), and a few one-offs (xurl, obsidian, yuanbao,
+    # dogfood) — irrelevant to this homelab.
+    #
+    # Web search/extract remains available via the `web` toolset (SEARXNG_URL
+    # in deployment.yaml) — it is a toolset, not a skill, and not gated by
+    # this list. The freshrss skill comes from agentregistry and is also
+    # outside this filter.
+    skills:
+      disabled:
+        # apple (5)
+        - apple-notes
+        - apple-reminders
+        - findmy
+        - imessage
+        - macos-computer-use
+        # autonomous-ai-agents (4 — keeping opencode)
+        - claude-code
+        - codex
+        - hermes-agent
+        - kanban-codex-lane
+        # creative (20 — all)
+        - architecture-diagram
+        - ascii-art
+        - ascii-video
+        - baoyu-article-illustrator
+        - baoyu-comic
+        - baoyu-infographic
+        - claude-design
+        - comfyui
+        - creative-ideation
+        - design-md
+        - excalidraw
+        - humanizer
+        - manim-video
+        - p5js
+        - pixel-art
+        - popular-web-designs
+        - pretext
+        - sketch
+        - songwriting-and-ai-music
+        - touchdesigner-mcp
+        # data-science (1 — all)
+        - jupyter-live-kernel
+        # devops (2 — keeping webhook-subscriptions)
+        - kanban-orchestrator
+        - kanban-worker
+        # gaming (2 — all)
+        - minecraft-modpack-server
+        - pokemon-player
+        # media (5 — all)
+        - gif-search
+        - heartmula
+        - songsee
+        - spotify
+        - youtube-content
+        # mlops (1 — all)
+        - huggingface-hub
+        # note-taking (1 — all)
+        - obsidian
+        # productivity (7 — keeping nano-pdf, ocr-and-documents)
+        - airtable
+        - google-workspace
+        - linear
+        - maps
+        - notion
+        - powerpoint
+        - teams-meeting-pipeline
+        # research (2 — keeping arxiv, llm-wiki, research-paper-writing)
+        - blogwatcher
+        - polymarket
+        # smart-home (1 — all)
+        - openhue
+        # social-media (1 — all)
+        - xurl
+        # uncategorized (2 — all)
+        - dogfood
+        - yuanbao
+
     # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
     # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
     # reads from the envFrom-injected hermes-secrets Secret. Long-polling
