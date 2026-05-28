@@ -187,6 +187,20 @@ spec:
             # key is required for the SearXNG backend.
             - name: SEARXNG_URL
               value: http://searxng.searxng:8080
+            # Curated allowlist of bundled skills (vs. all ~82 that ship in
+            # the hermes-agent image). Cuts the system-prompt skills section
+            # from ~18k tokens to ~5-6k. Keeps: opencode, webhook-subscriptions,
+            # himalaya (email), github toolkit, native-mcp, PDF/OCR, godmode,
+            # research (arxiv/llm-wiki/research-paper-writing), and the full
+            # software-development category (TDD, debugging, planning).
+            # Skipped: apple, creative, gaming, smart-home, social-media,
+            # yuanbao, etc. — irrelevant to this homelab. Web search/extract
+            # remains available via the `web` toolset (SEARXNG_URL above) —
+            # it's a toolset, not a skill, and not gated by this env var.
+            # The freshrss skill comes from agentregistry and is independent
+            # of this list.
+            - name: HERMES_BUNDLED_SKILLS
+              value: "opencode,webhook-subscriptions,himalaya,codebase-inspection,github-auth,github-code-review,github-issues,github-pr-workflow,github-repo-management,native-mcp,nano-pdf,ocr-and-documents,godmode,arxiv,llm-wiki,research-paper-writing,debugging-hermes-tui-commands,hermes-agent-skill-authoring,hermes-s6-container-supervision,node-inspect-debugger,plan,python-debugpy,requesting-code-review,spike,subagent-driven-development,systematic-debugging,test-driven-development,writing-plans"
           volumeMounts:
             - name: data
               mountPath: /opt/data
