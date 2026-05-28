@@ -171,6 +171,13 @@ data:
         # uncategorized (2 — all)
         - dogfood
         - yuanbao
+        # inference-sh / mlops extras (4 — keeping dspy, lm-evaluation-harness,
+        # obliteratus, vllm; these 8 skills are in the deployed image but
+        # not in the public main-branch git tree).
+        - audiocraft
+        - llama-cpp
+        - segment-anything
+        - weights-and-biases
 
     # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
     # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
