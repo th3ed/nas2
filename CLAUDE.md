@@ -158,6 +158,18 @@ Use `/tdd-infra <request>` for any change that touches cluster behavior:
 3. Runtime secrets — add `bitwarden-secret.yaml` (copy `gitops/manifests/openclaw/bitwarden-secret.yaml`). **Stop and ask the user for the Bitwarden organization ID and secret IDs before writing this file.** Never guess or invent them.
 4. Commit `gitops/apps/<app>.yaml` and all `gitops/manifests/<app>/` files together.
 
+### Adding a new skill
+
+Skills (Anthropic `SKILL.md` format) are fully GitOps-managed via AgentRegistry — never `arctl apply` from a laptop or `kubectl exec` skill content into a pod.
+
+1. `gitops/skills/<name>/` — drop the skill body here: a `SKILL.md` with YAML frontmatter (`name:` MUST match the directory name) plus any helper `scripts/`.
+2. `gitops/manifests/agentregistry/skill-catalog.yaml` — append one object to the JSON array (MCP Registry schema — flat `name`, `description`, `version`, `repository: {source, url}`; `url` is always `https://github.com/th3ed/nas2.git` for in-repo skills). The catalog `name` MUST match the directory name AND the SKILL.md frontmatter `name:`.
+3. If the skill needs runtime secrets, add them to `gitops/manifests/hermes/bitwarden-secret.yaml` so Hermes's `envFrom: hermes-secrets` surfaces them — **ask the user for the Bitwarden organization ID and secret IDs first** (same rule as new apps).
+4. Commit and push. The Argo Sync hook `skill-registry-sync` POSTs the catalog to `/v0/skills` and rollout-restarts Hermes automatically.
+5. Add or update `tests/test-skills-registry.sh` to assert the new skill is in the registry catalog AND its `SKILL.md` lands on the hermes PVC.
+
+Do not hand-add per-skill init containers to `gitops/manifests/hermes/deployment.yaml` (the old `install-freshrss-skill` pattern, since removed). The generic `install-registry-skills` init container reads the catalog and clones each skill by convention.
+
 ### Secret handling rules
 
 - **Bitwarden Secrets Manager** is the correct store for all runtime app secrets. Never put secret values in manifests, values files, or CLAUDE.md.
@@ -176,6 +188,8 @@ Copy these files — do not invent alternatives.
 | BitwardenSecret CRD | `gitops/manifests/openclaw/bitwarden-secret.yaml` |
 | ignoreDifferences block | `gitops/apps/metallb.yaml` |
 | LiteLLM `pre_call_hook` callback | `gitops/manifests/litellm/callbacks-configmap.yaml` |
+| Skill (Anthropic SKILL.md) body | `gitops/skills/freshrss/` |
+| AgentRegistry catalog entry | `gitops/manifests/agentregistry/skill-catalog.yaml` |
 
 Tailnet domain: `taile9c9c.ts.net` (in `group_vars/all/main.yml`).
 GPU workloads: require `runtimeClassName: nvidia` in the PodSpec — see `gitops/manifests/gpu-operator/runtimeclass.yaml`.
@@ -195,4 +209,5 @@ Health checks: add liveness/readiness probes in Deployment manifests where the u
 - **sm-operator delta-sync stale-state**: when you add a *new* `bwSecretId` mapping to a `BitwardenSecret` whose previous sync already succeeded, the operator's reconcile loop logs `No changes to <ns>/<name>. Skipping sync.` and never fetches the new entry. Root cause: the operator gates on Bitwarden's "secrets-modified-since-lastSyncTime" delta API *before* checking whether the materialized K8s Secret actually contains the keys it should. The new Bitwarden secret's `lastModifiedDate` predates `status.lastSuccessfulSyncTime`, so the delta query is empty and the operator skips. Restarting the operator pod and deleting the materialized Secret do **not** help — the gate runs first. The unstick is to clear the timestamp so the next reconcile does a full pull: `kubectl -n <ns> patch bitwardensecret <name> --subresource=status --type=merge -p '{"status":{"lastSuccessfulSyncTime":null}}'`. Then restart any pod that uses the Secret via `envFrom` so the new env vars actually land.
 - **LiteLLM `pre_call_hook` sees the user-facing model name**: a custom callback's `data["model"]` field is the entry from `proxy_config.model_list` (e.g. `gemma4:e4b`), **not** the resolved `litellm_params.model` (e.g. `ollama_chat/gemma4:e4b`). Gate model-specific logic on the user-facing name. Also, the callback module file is loaded by `importlib.util.spec_from_file_location` *relative to `os.path.dirname(config_file_path)`* — for our Helm-mounted config at `/etc/litellm/config.yaml`, the callback must be mounted at `/etc/litellm/<module>.py`, not in site-packages. See `gitops/manifests/litellm/callbacks-configmap.yaml` (the gemma tool-result rewrite hook) for the canonical wiring.
 - **Gemma 4 + Ollama drops `role:tool` messages**: Ollama's compiled `RENDERER gemma4` / `PARSER gemma4` template silently ignores `role:tool` entries in the prompt. Any agent that depends on the model reading tool output (web_search → weather, etc.) will loop forever — the model re-derives "I should call this tool" because the prior result is invisible. The fix in this cluster is the LiteLLM `pre_call_hook` above; it rewrites `role:tool` → `role:user` and assistant `tool_calls` → assistant text before forwarding to Ollama. Removable once Ollama's gemma renderer learns the `tool` role.
+- **AgentRegistry schema is MCP Registry, not `ar.dev/v1alpha1`**: the deployed server (v0.3.3) speaks the flat MCP Registry shape — `GET /v0/skills` returns `{"skills":[{"skill":{"name":...,"repository":{"source":"github","url":...}},"_meta":{...}}]}`, and writes are `POST /v0/skills` (not `/v0/apply`). Older AgentRegistry docs and `arctl apply -f skill.yaml` walkthroughs reference the Kubernetes-style `apiVersion: ar.dev/v1alpha1` / `kind: Skill` / `spec.source.repository.{url,branch,subfolder}` schema — that schema does **not** work against this server (`additionalProperties: false` on `SkillJSON`). There is no `branch` or `subfolder` field; the Hermes init container resolves monorepo subdirs by convention (`gitops/skills/<name>/` first, then `<name>/`, then repo root). Writes are unauthenticated when reached in-cluster.
 - **Renovate** (`.github/renovate.json`) tracks chart versions and image tags across both `group_vars/` and `gitops/manifests/`. Expect PRs; review them rather than bumping versions by hand.
