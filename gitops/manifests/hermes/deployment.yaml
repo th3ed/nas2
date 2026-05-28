@@ -32,17 +32,20 @@ spec:
         - name: install-registry-skills
           # Pulls every skill registered in the in-cluster AgentRegistry
           # (gitops/apps/agentregistry.yaml) into /data/skills/<name>/.
-          # Refreshed on every pod start; restart with
-          # `kubectl -n hermes rollout restart deploy/hermes` after
-          # registering a new skill.
+          # Refreshed on every pod start; the Argo Sync hook
+          # `skill-registry-sync` (gitops/manifests/agentregistry/skill-sync-job.yaml)
+          # auto-rolls this Deployment whenever the catalog changes, so
+          # adding a new skill is "edit skill-catalog.yaml + push".
           #
-          # Skill source model: AgentRegistry's Skill.spec.source.repository
-          # is a git location (url + branch + subfolder), so we clone with
-          # git rather than pulling OCI images. Skills published via
-          # `arctl build --push` (which produces an OCI image) are NOT
-          # supported by this loop — register skills with a public git
-          # repository instead. The chart's REST API at /v0/skills returns
-          # the full Skill record including spec.source.repository.
+          # Skill source model: the deployed AgentRegistry (v0.3.3) speaks
+          # the MCP Registry schema — repository is a flat {source, url}
+          # with no branch or subfolder. To host multiple skills in one
+          # monorepo we look up the body by convention at
+          #   <repo>/gitops/skills/<name>/SKILL.md
+          # falling back to <repo>/<name>/SKILL.md for single-skill
+          # subdirs and <repo>/SKILL.md for one-repo-per-skill layouts.
+          # Skill content not at one of those paths is logged WARN and
+          # skipped.
           #
           # Defensive: any per-skill failure logs WARN and continues;
           # registry unreachable after a short retry exits 0 so this
@@ -73,74 +76,48 @@ spec:
                 exit 0
               fi
 
-              body=$(curl -fsS "${REGISTRY}/v0/skills?namespace=all" || echo '{"items":[]}')
-              count=$(echo "$body" | jq '.items | length')
+              body=$(curl -fsS "${REGISTRY}/v0/skills" || echo '{"skills":[]}')
+              count=$(echo "$body" | jq '.skills | length')
               if [ "$count" = "0" ]; then
                 echo "INFO: AgentRegistry catalog is empty; nothing to install"
                 exit 0
               fi
               echo "INFO: found $count skill(s) in registry"
 
-              echo "$body" | jq -c '.items[]' | while read -r skill; do
-                name=$(echo "$skill" | jq -r '.metadata.name')
-                url=$(echo "$skill" | jq -r '.spec.source.repository.url // empty')
-                branch=$(echo "$skill" | jq -r '.spec.source.repository.branch // "main"')
-                subfolder=$(echo "$skill" | jq -r '.spec.source.repository.subfolder // ""')
+              echo "$body" | jq -c '.skills[]' | while read -r entry; do
+                name=$(echo "$entry" | jq -r '.skill.name')
+                url=$(echo  "$entry" | jq -r '.skill.repository.url // empty')
 
                 if [ -z "$url" ]; then
-                  echo "WARN: skill $name has no spec.source.repository.url; skipping"
+                  echo "WARN: skill $name has no repository.url; skipping"
                   continue
                 fi
 
                 dest=/data/skills/$name
                 tmp=$(mktemp -d)
-                echo "INFO: cloning $url ($branch) for skill $name"
-                if ! git clone --depth 1 --branch "$branch" "$url" "$tmp" 2>&1; then
+                echo "INFO: cloning $url for skill $name"
+                if ! git clone --depth 1 "$url" "$tmp" 2>&1; then
                   echo "WARN: clone failed for $name; skipping"
                   rm -rf "$tmp"
                   continue
                 fi
 
                 rm -rf "$dest"
-                if [ -n "$subfolder" ]; then
-                  mv "$tmp/$subfolder" "$dest" || {
-                    echo "WARN: subfolder $subfolder not found in $name; skipping"
-                    rm -rf "$tmp"
-                    continue
-                  }
+                if   [ -f "$tmp/gitops/skills/$name/SKILL.md" ]; then
+                  mv "$tmp/gitops/skills/$name" "$dest"
+                elif [ -f "$tmp/$name/SKILL.md" ]; then
+                  mv "$tmp/$name" "$dest"
+                elif [ -f "$tmp/SKILL.md" ]; then
+                  mv "$tmp" "$dest"; tmp=""
                 else
-                  mv "$tmp" "$dest"
-                  tmp=""
+                  echo "WARN: $name has no SKILL.md (looked in gitops/skills/$name, $name, root); skipping"
+                  rm -rf "$tmp"
+                  continue
                 fi
                 [ -n "$tmp" ] && rm -rf "$tmp"
                 echo "INFO: installed $name -> $dest"
               done
               echo "INFO: skill install complete"
-          volumeMounts:
-            - name: data
-              mountPath: /data
-        - name: install-freshrss-skill
-          # Clones the FreshRSS skill into the Hermes skills directory.
-          # The skill is available at /data/skills/freshrss/ (= /opt/data/skills/
-          # from the main container's perspective). If the remote repo is
-          # unreachable (e.g., not yet pushed), the container exits 0 so it
-          # doesn't block pod startup.
-          image: alpine/git:2.45.2
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              mkdir -p /data/skills
-              if [ -d /data/skills/freshrss/.git ]; then
-                git -C /data/skills/freshrss pull --ff-only 2>/dev/null || true
-              else
-                rm -rf /data/skills/freshrss
-                if git clone --depth 1 https://github.com/th3ed/freshrss_hermes_skill.git /tmp/skill 2>/dev/null; then
-                  mv /tmp/skill/freshrss /data/skills/freshrss
-                  rm -rf /tmp/skill
-                else
-                  echo "WARN: freshrss skill repo not available yet, skipping"
-                fi
-              fi
           volumeMounts:
             - name: data
               mountPath: /data

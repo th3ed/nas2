@@ -1,0 +1,12 @@
+---
+# ServiceAccount the skill-sync Job runs as. The cross-namespace Role +
+# RoleBinding that grant this SA `patch deployments` in the hermes
+# namespace live with the hermes Application (gitops/manifests/hermes/
+# skill-sync-rbac.yaml) — keeping the binding next to the protected
+# resource avoids first-bring-up ordering: hermes namespace doesn't exist
+# yet when agentregistry (sync-wave 10) syncs.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: skill-sync
+  namespace: agentregistry

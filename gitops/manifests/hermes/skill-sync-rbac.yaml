@@ -1,0 +1,29 @@
+---
+# Lets the skill-sync Job (ServiceAccount in agentregistry namespace,
+# defined alongside its Job) rollout-restart this Deployment after it
+# registers updated skills in AgentRegistry. Scoped to the named
+# "hermes" deployment only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hermes-rollout-restart
+  namespace: hermes
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["hermes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hermes-rollout-restart
+  namespace: hermes
+subjects:
+  - kind: ServiceAccount
+    name: skill-sync
+    namespace: agentregistry
+roleRef:
+  kind: Role
+  name: hermes-rollout-restart
+  apiGroup: rbac.authorization.k8s.io

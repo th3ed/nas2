@@ -1,0 +1,33 @@
+---
+# Source of truth for what's registered in AgentRegistry.
+# `skill-sync-job.yaml` (Argo Sync hook) reads each entry and POSTs it to
+# /v0/skills on every Argo sync — idempotent, "Create or update skill".
+#
+# Schema is the MCP Registry shape the deployed server (v0.3.3) speaks:
+#   name, description, version, repository{source, url}
+# There is no `branch` or `subfolder` field. The Hermes init container
+# (`install-registry-skills` in gitops/manifests/hermes/deployment.yaml)
+# looks up the skill body by convention at gitops/skills/<name>/ inside
+# the cloned repo. Keep `name` here in sync with the directory name under
+# gitops/skills/ AND with the SKILL.md frontmatter `name:` field.
+#
+# Adding a new skill = append another object to the array + drop the
+# content under gitops/skills/<name>/.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skill-catalog
+  namespace: agentregistry
+data:
+  skills.json: |
+    [
+      {
+        "name": "freshrss",
+        "description": "Manage RSS feeds and articles via a self-hosted FreshRSS instance. Read articles, get summaries, check unread counts, mark read/starred, add or remove feed subscriptions.",
+        "version": "1.0.0",
+        "repository": {
+          "source": "github",
+          "url": "https://github.com/th3ed/nas2.git"
+        }
+      }
+    ]

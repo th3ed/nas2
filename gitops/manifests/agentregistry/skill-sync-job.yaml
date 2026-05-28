@@ -1,0 +1,100 @@
+---
+# Argo Sync hook Job: POSTs every entry in skill-catalog ConfigMap to the
+# registry's `/v0/skills` endpoint (idempotent — "Create or update skill"),
+# then triggers a Hermes rollout so the new catalog is pulled by Hermes's
+# `install-registry-skills` init container on the next pod start.
+#
+# Why a Sync hook and not a regular Job manifest: standard k8s Jobs are
+# immutable once created. By using `hook: Sync` + `hook-delete-policy:
+# BeforeHookCreation,HookSucceeded`, Argo deletes any prior Job before
+# applying the new one on every sync, so catalog edits trigger a clean
+# re-run instead of "Job already exists" errors.
+#
+# Sync wave 15 places this between agentregistry (wave 10) and hermes
+# (wave 20) on a fresh cluster bring-up: the registry must be up before we
+# POST to it, and Hermes hasn't started yet so the rollout-restart is a
+# no-op on first install (Hermes's own init container handles the first
+# fetch). On subsequent syncs, all three waves run together and the
+# rollout-restart triggers a pod recycle.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: skill-registry-sync
+  namespace: agentregistry
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "15"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: skill-sync
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: skill-sync
+      containers:
+        - name: sync
+          # alpine/k8s ships kubectl + curl + jq + bash in one image, so we
+          # can do the POST loop and the rollout-restart in a single
+          # container without juggling multiple init containers.
+          image: alpine/k8s:1.31.0
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -eu
+              REGISTRY=http://agentregistry.agentregistry:12121
+
+              echo "INFO: waiting for registry to answer /v0/health"
+              for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                if curl -fsS "${REGISTRY}/v0/health" >/dev/null 2>&1; then
+                  echo "INFO: registry healthy"
+                  break
+                fi
+                sleep 5
+              done
+              curl -fsS "${REGISTRY}/v0/health" >/dev/null
+
+              skills_json=/skills/skills.json
+              count=$(jq 'length' "$skills_json")
+              echo "INFO: registering $count skill(s) from skill-catalog ConfigMap"
+
+              # POST one skill at a time so a single bad entry doesn't poison
+              # the rest. Server is idempotent on (name, version).
+              jq -c '.[]' "$skills_json" | while read -r entry; do
+                name=$(echo "$entry" | jq -r '.name')
+                http=$(echo "$entry" | curl -sS -o /tmp/resp -w '%{http_code}' \
+                  -X POST -H 'Content-Type: application/json' \
+                  --data-binary @- "${REGISTRY}/v0/skills")
+                if [ "$http" = "200" ] || [ "$http" = "201" ]; then
+                  echo "OK: $name (http=$http)"
+                else
+                  echo "FAIL: $name (http=$http)"
+                  cat /tmp/resp
+                  exit 1
+                fi
+              done
+
+              # Rollout-restart triggers Hermes's install-registry-skills init
+              # container to re-query the registry and re-clone skills.
+              # Best-effort: on first cluster bring-up the hermes namespace
+              # AND the RBAC granting this SA `patch deployments` don't exist
+              # yet (they're owned by the hermes Application at sync wave 20).
+              # Hermes's own init container handles the first fetch when it
+              # eventually starts, so a failed restart here is non-fatal.
+              echo "INFO: triggering hermes rollout (best-effort)"
+              if ! kubectl -n hermes rollout restart deployment hermes 2>&1; then
+                echo "WARN: rollout-restart failed; hermes will fetch on next pod start"
+              fi
+
+              echo "INFO: skill-sync done"
+          volumeMounts:
+            - name: skills
+              mountPath: /skills
+              readOnly: true
+      volumes:
+        - name: skills
+          configMap:
+            name: skill-catalog

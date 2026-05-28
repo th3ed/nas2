@@ -9,103 +9,109 @@ your laptop), and opencode (on your laptop).
 A skill is the Anthropic `SKILL.md` format — a directory containing a
 markdown file with YAML frontmatter (`name:`, `description:`, optional
 `allowed-tools:`) plus any supporting scripts or assets. The registry stores
-each skill as a reference to a git repository (`spec.source.repository`
-with `url`, `branch`, optional `subfolder`) and exposes a REST API + web
-UI + CLI (`arctl`) for publish / discover / pull.
+each skill as a reference to a git repository (`repository.url`) and exposes
+a REST API + web UI for discover / pull.
 
-> Skills published as OCI images (via `arctl build --push`) are not
-> currently consumed by Hermes — the Hermes init container clones from
-> the skill's git repository instead. Register skills with a public git
-> URL until OCI support is added.
+## How skills are managed (GitOps)
 
-## 1. Install `arctl` on your laptop
+Skills are owned by this repo end-to-end:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
-arctl version
+- **Content** lives at `gitops/skills/<name>/` (a directory containing
+  `SKILL.md` and any helper scripts).
+- **Catalog membership** is declared in
+  `gitops/manifests/agentregistry/skill-catalog.yaml` — one JSON object per
+  skill with `name`, `description`, `version`, and `repository`.
+- **Sync to the registry** happens automatically: an Argo Sync hook Job
+  (`skill-registry-sync` in the `agentregistry` namespace) POSTs every
+  catalog entry to `/v0/skills` on each Argo sync, then rollout-restarts
+  Hermes so its init container re-clones the skills.
+
+To add or change a skill:
+
+1. Drop the content under `gitops/skills/<name>/`.
+2. Append an entry to `skill-catalog.yaml` (keep `name` matching the
+   directory name AND the SKILL.md frontmatter `name:`).
+3. Commit and push to `main`. Argo applies within ~3 minutes; the Sync hook
+   posts the catalog change to the registry and restarts Hermes.
+
+To remove a skill: delete its directory and its catalog entry in the same
+commit. (The registry retains the prior record; `DELETE /v0/skills/<name>/versions/<v>`
+soft-deletes it if you want it gone from the listing.)
+
+## Schema
+
+The deployed server (v0.3.3) speaks the
+[MCP Registry](https://modelcontextprotocol.io) schema, not the older
+Kubernetes-style `apiVersion: ar.dev/v1alpha1` you may see in upstream
+examples. Catalog entries look like:
+
+```json
+{
+  "name": "freshrss",
+  "description": "Manage RSS feeds and articles via a self-hosted FreshRSS instance.",
+  "version": "1.0.0",
+  "repository": {"source": "github", "url": "https://github.com/th3ed/nas2.git"}
+}
 ```
 
-The install script also starts a local arctl daemon on `localhost:12121`
-that is **separate** from the nas2 cluster's registry. For the workflow
-below you'll only use the cluster registry, but the local daemon is
-harmless — leave it running or `arctl daemon stop` to shut it down.
+There is no `branch` or `subfolder` field in the registry's `repository`
+schema. The Hermes init container handles the monorepo layout by convention:
+it clones `repository.url` and looks for the skill body at, in order:
 
-## 2. Point arctl at the cluster registry
+1. `gitops/skills/<name>/SKILL.md` — this repo's monorepo layout
+2. `<name>/SKILL.md` — single-skill subdir (e.g. legacy `freshrss_hermes_skill`)
+3. `SKILL.md` at the repo root — one-repo-per-skill
 
-Export the registry URL once (add to `~/.zshrc` to make it sticky):
+If none match, the skill is logged WARN and skipped.
+
+## How Hermes consumes the registry
+
+Hermes runs an `install-registry-skills` init container that, on every pod
+start, calls the cluster registry's `/v0/skills` endpoint and `git clone`s
+every registered skill into `/opt/data/skills/<name>/` (via the convention
+above). To pick up a newly-published skill manually:
 
 ```bash
-export AGENT_REGISTRY_URL=https://agentregistry.taile9c9c.ts.net
+ssh nas2 'kubectl -n hermes rollout restart deploy/hermes'
 ```
 
-Confirm:
+— but the Sync hook Job above does this for you on every catalog change, so
+the manual restart is only needed if you change skill content without
+bumping the catalog (e.g., when you edit `SKILL.md` without touching
+`version`).
+
+The init container is defensive: if the registry is unreachable, a
+per-skill clone fails, or the catalog is empty, it logs a `WARN` and exits
+0 so Hermes always starts.
+
+## Consuming from Claude Code (laptop)
+
+Claude Code auto-discovers skills under `~/.claude/skills/`. With the
+git-source model, one-line clone (no `arctl pull` needed):
 
 ```bash
-curl -fsS "$AGENT_REGISTRY_URL/v0/health"   # 200 OK
-arctl get skills                            # empty list at first
-```
-
-You must be on the tailnet (Tailscale connected) for the hostname to
-resolve.
-
-## 3. Author and publish a skill
-
-1. Author the skill in a **public git repository** with a `SKILL.md`
-   at the repo root (or in a subfolder you'll reference below).
-2. Write a `skill.yaml` registration file pointing at the repo:
-
-   ```yaml
-   apiVersion: ar.dev/v1alpha1
-   kind: Skill
-   metadata:
-     name: weather-helper
-   spec:
-     title: Weather helper
-     description: Looks up the local forecast and summarises it.
-     source:
-       repository:
-         url: https://github.com/<you>/weather-helper.git
-         branch: main
-         # subfolder: skills/weather-helper   # if SKILL.md is nested
-   ```
-
-3. Register the record in the nas2 cluster registry:
-
-   ```bash
-   arctl apply -f skill.yaml
-   arctl get skills          # weather-helper appears
-   ```
-
-## 4. Consume from Claude Code
-
-Claude Code auto-discovers skills under `~/.claude/skills/`. The
-registry's git-source model means a one-line clone (no `arctl pull`
-needed for git-backed skills):
-
-```bash
-git clone --depth 1 https://github.com/<you>/weather-helper.git \
-    ~/.claude/skills/weather-helper
+git clone --depth 1 https://github.com/th3ed/nas2.git /tmp/nas2-skills
+cp -r /tmp/nas2-skills/gitops/skills/freshrss ~/.claude/skills/freshrss
 ```
 
 Or list what's in the registry first to discover the URL:
 
 ```bash
-curl -fsS "$AGENT_REGISTRY_URL/v0/skills?namespace=all" \
-  | jq -r '.items[] | "\(.metadata.name)\t\(.spec.source.repository.url)"'
+curl -fsS https://agentregistry.taile9c9c.ts.net/v0/skills \
+  | jq -r '.skills[].skill | "\(.name)\t\(.repository.url)"'
 ```
 
 Start a new Claude Code session and the skill becomes available.
 
-## 5. Consume from opencode
+## Consuming from opencode (laptop)
 
 opencode reads `AGENTS.md` at the project root and follows `@`-prefixed
 file references in it, but it does not auto-discover Anthropic skill
-directories. Clone the skill into the project and reference it from
+directories. Copy the skill into the project and reference it from
 `AGENTS.md`:
 
 ```bash
-git clone --depth 1 https://github.com/<you>/weather-helper.git \
-    ./skills/weather-helper
+cp -r /tmp/nas2-skills/gitops/skills/freshrss ./skills/freshrss
 ```
 
 Then add to your project's `AGENTS.md`:
@@ -113,45 +119,24 @@ Then add to your project's `AGENTS.md`:
 ```markdown
 ## Skills
 
-- See @skills/weather-helper/SKILL.md for the weather-helper workflow.
+- See @skills/freshrss/SKILL.md for the freshrss workflow.
 ```
 
 opencode will inline the SKILL.md content into the system prompt the next
 time the session starts.
-
-## 6. How Hermes consumes the registry
-
-Hermes runs an `install-registry-skills` init container that, on every
-pod start, calls the cluster registry's `/v0/skills?namespace=all`
-endpoint and `git clone`s every registered skill into
-`/opt/data/skills/<name>/` (respecting each skill's
-`spec.source.repository.branch` and `subfolder`). To pick up a
-newly-published skill:
-
-```bash
-arctl apply -f skill.yaml
-kubectl -n hermes rollout restart deploy/hermes
-```
-
-The init container is defensive: if the registry is unreachable, a per-
-skill clone fails, or the catalog is empty, it logs a `WARN` and exits 0
-so Hermes always starts. The existing FreshRSS skill
-(`install-freshrss-skill` init container) is unaffected — it continues
-to clone from its dedicated GitHub repo, independent of AgentRegistry.
-
-OCI-image-backed skills (`arctl build --push`) are not yet supported by
-this init container. If you need them, extend
-`gitops/manifests/hermes/deployment.yaml` to `crane export` the image
-ref instead of `git clone`.
 
 ## Notes
 
 - The registry's gRPC (`21212`) and MCP (`31313`) ports are
   ClusterIP-only. Only the web UI / REST API on `12121` is exposed via
   Tailscale Ingress.
-- State (Postgres) lives in a 5 Gi PVC inside the cluster; back it up
-  with the same approach you use for other PVCs (currently none — single-
-  node homelab).
+- Writes to `/v0/skills` are unauthenticated when reached from inside the
+  cluster (no `securitySchemes` declared in `/openapi.json`). External
+  writes via the Tailscale Ingress travel over the tailnet boundary;
+  treat the tailnet as the auth perimeter.
+- State (Postgres + pgvector) lives in a 5 Gi PVC inside the cluster;
+  back it up with the same approach you use for other PVCs (currently
+  none — single-node homelab).
 - The JWT signing key is sourced from Bitwarden SM via the
   `agentregistry-jwt` `BitwardenSecret`; rotate by generating a new
   `openssl rand -hex 32`, updating the Bitwarden secret, then bumping
