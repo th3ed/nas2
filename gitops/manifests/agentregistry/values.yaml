@@ -1,0 +1,23 @@
+# AgentRegistry chart overrides. See chart/values.yaml for the full schema.
+# Pin the image to the chart's appVersion (v0.3.3) by leaving image.tag empty.
+
+# JWT signing key — pulled from Bitwarden SM via agentregistry-jwt
+# BitwardenSecret. Required by the chart's validate.yaml (NOTES.txt fail()
+# otherwise). The Secret name must match config.existingSecret.
+config:
+  existingSecret: agentregistry-jwt
+  enableRegistryValidation: "true"
+
+# Exposed on the tailnet via Tailscale Ingress (tailscale-ingress.yaml);
+# no LoadBalancer needed. The Hermes init container reaches gRPC/MCP through
+# the in-cluster Service DNS, so those ports stay ClusterIP-only.
+service:
+  type: ClusterIP
+
+# Bundled Postgres on a 5 Gi PVC. Fine for a single-user homelab; switch
+# to an external Postgres URL if state ever needs to outlive the cluster.
+database:
+  postgres:
+    bundled:
+      enabled: true
+      storage: 5Gi

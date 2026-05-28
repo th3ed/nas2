@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentregistry
+  namespace: agentregistry
+  annotations:
+    tailscale.com/http-redirect: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: agentregistry
+      port:
+        number: 12121
+  tls:
+    - hosts:
+        - agentregistry

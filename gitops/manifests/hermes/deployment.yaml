@@ -29,6 +29,96 @@ spec:
       securityContext:
         fsGroup: 10000
       initContainers:
+        - name: install-registry-skills
+          # Pulls every skill registered in the in-cluster AgentRegistry
+          # (gitops/apps/agentregistry.yaml) into /data/skills/<name>/.
+          # Refreshed on every pod start; restart with
+          # `kubectl -n hermes rollout restart deploy/hermes` after
+          # registering a new skill.
+          #
+          # Skill source model: AgentRegistry's Skill.spec.source.repository
+          # is a git location (url + branch + subfolder), so we clone with
+          # git rather than pulling OCI images. Skills published via
+          # `arctl build --push` (which produces an OCI image) are NOT
+          # supported by this loop — register skills with a public git
+          # repository instead. The chart's REST API at /v0/skills returns
+          # the full Skill record including spec.source.repository.
+          #
+          # Defensive: any per-skill failure logs WARN and continues;
+          # registry unreachable after a short retry exits 0 so this
+          # container never blocks pod startup.
+          image: alpine/git:2.45.2
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              # alpine/git is alpine-based; add curl + jq for the API call.
+              apk add --no-cache --quiet curl jq >/dev/null 2>&1 || {
+                echo "WARN: apk add failed; skipping skill install"; exit 0; }
+
+              REGISTRY=http://agentregistry.agentregistry:12121
+              mkdir -p /data/skills
+
+              # Wait up to ~30s for the registry to be reachable. Fresh
+              # cluster bring-up can have Argo finish hermes before
+              # agentregistry's Postgres is Ready.
+              for i in 1 2 3 4 5 6; do
+                if curl -fsS "${REGISTRY}/v0/health" >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 5
+              done
+              if ! curl -fsS "${REGISTRY}/v0/health" >/dev/null 2>&1; then
+                echo "WARN: AgentRegistry unreachable after 30s; skipping"
+                exit 0
+              fi
+
+              body=$(curl -fsS "${REGISTRY}/v0/skills?namespace=all" || echo '{"items":[]}')
+              count=$(echo "$body" | jq '.items | length')
+              if [ "$count" = "0" ]; then
+                echo "INFO: AgentRegistry catalog is empty; nothing to install"
+                exit 0
+              fi
+              echo "INFO: found $count skill(s) in registry"
+
+              echo "$body" | jq -c '.items[]' | while read -r skill; do
+                name=$(echo "$skill" | jq -r '.metadata.name')
+                url=$(echo "$skill" | jq -r '.spec.source.repository.url // empty')
+                branch=$(echo "$skill" | jq -r '.spec.source.repository.branch // "main"')
+                subfolder=$(echo "$skill" | jq -r '.spec.source.repository.subfolder // ""')
+
+                if [ -z "$url" ]; then
+                  echo "WARN: skill $name has no spec.source.repository.url; skipping"
+                  continue
+                fi
+
+                dest=/data/skills/$name
+                tmp=$(mktemp -d)
+                echo "INFO: cloning $url ($branch) for skill $name"
+                if ! git clone --depth 1 --branch "$branch" "$url" "$tmp" 2>&1; then
+                  echo "WARN: clone failed for $name; skipping"
+                  rm -rf "$tmp"
+                  continue
+                fi
+
+                rm -rf "$dest"
+                if [ -n "$subfolder" ]; then
+                  mv "$tmp/$subfolder" "$dest" || {
+                    echo "WARN: subfolder $subfolder not found in $name; skipping"
+                    rm -rf "$tmp"
+                    continue
+                  }
+                else
+                  mv "$tmp" "$dest"
+                  tmp=""
+                fi
+                [ -n "$tmp" ] && rm -rf "$tmp"
+                echo "INFO: installed $name -> $dest"
+              done
+              echo "INFO: skill install complete"
+          volumeMounts:
+            - name: data
+              mountPath: /data
         - name: install-freshrss-skill
           # Clones the FreshRSS skill into the Hermes skills directory.
           # The skill is available at /data/skills/freshrss/ (= /opt/data/skills/

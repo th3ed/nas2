@@ -1,0 +1,44 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentregistry
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    # Vendored chart (no upstream Helm repo / OCI publish; release is a tgz
+    # asset on GitHub Releases). Bump by re-extracting the new release tgz
+    # into chart/ and updating this comment with the version.
+    # Source: https://github.com/agentregistry-dev/agentregistry/releases
+    # Vendored version: v0.3.3
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/agentregistry/chart
+      helm:
+        releaseName: agentregistry
+        valueFiles:
+          - $values/gitops/manifests/agentregistry/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      ref: values
+    # Sister manifests (namespace, Tailscale Ingress, BitwardenSecret).
+    # Argo's directory source is non-recursive by default, so chart/ is
+    # not re-applied here; values.yaml has no kind: and is silently skipped.
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/agentregistry
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agentregistry
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

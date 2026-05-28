@@ -26,7 +26,7 @@ Sync wave annotation (`argocd.argoproj.io/sync-wave`) controls bring-up order:
 | `-5` | `metallb`, `sm-operator` (Bitwarden Secrets Manager) |
 | `0` | `gpu-operator`, `tailscale-operator` |
 | `5` | `kube-prometheus-stack`, `loki` |
-| `10` | `alloy` |
+| `10` | `alloy`, `agentregistry` |
 | `20` | `ollama`, `openclaw` |
 
 GPU workloads (`ollama`, `openclaw`) require `runtimeClassName: nvidia`, which the `gpu-operator` provisions. The `runtimeclass.yaml` lives in `gitops/manifests/gpu-operator/`.
