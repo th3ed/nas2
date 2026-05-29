@@ -58,7 +58,6 @@ extraEnv:
   - name: OLLAMA_KV_CACHE_TYPE
     value: "q8_0"
 
-# Single-node now; spread across nodes in the future when multi-node arrives.
 replicaCount: 1
 updateStrategy:
   type: Recreate

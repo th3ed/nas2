@@ -1,6 +1,6 @@
 ---
-- name: Configure nas2 for GPU-accelerated containers
-  hosts: gpu_hosts
+- name: Configure k3s server nodes
+  hosts: k3s_servers
   gather_facts: true
 
   roles:
@@ -17,4 +17,17 @@
     - { role: user_shell,                 tags: [user_shell] }
     - { role: claude_code,                tags: [claude_code] }
     - { role: wifi,                       tags: [wifi] }
+    - { role: firewall,                   tags: [firewall] }
+
+- name: Configure k3s agent nodes
+  hosts: k3s_agents
+  gather_facts: true
+
+  roles:
+    - { role: common,                     tags: [common] }
+    - { role: docker,                     tags: [docker] }
+    - { role: nvidia_container_toolkit,   tags: [nvidia_container_toolkit, gpu] }
+    - { role: tailscale,                  tags: [tailscale] }
+    - { role: k3s,                        tags: [k3s, kubernetes] }
+    - { role: user_shell,                 tags: [user_shell] }
     - { role: firewall,                   tags: [firewall] }

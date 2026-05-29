@@ -2,14 +2,25 @@
 k3s_version: "v1.32.1+k3s1"
 k3s_install_script_url: "https://get.k3s.io"
 
+# Node role: "server" (control-plane + etcd) or "agent" (worker-only).
+# Override per-host in host_vars/<name>/main.yml.
+k3s_node_role: server
+
 k3s_server_args:
   - "--cluster-init"
   - "--disable=traefik"
   - "--disable=servicelb"
   - "--write-kubeconfig-mode=0644"
 
+k3s_agent_args: []
+
+# URL of the k3s API server — required for agent nodes.
+# e.g. https://nas2.taile9c9c.ts.net:6443
+k3s_server_url: ""
+
 k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
 
 # Additional TLS SANs for the k3s API server cert. Changing this list causes
-# k3s to regenerate its serving cert on next restart.
+# k3s to regenerate its serving cert on next restart. Set in host_vars for servers;
+# agents leave this empty.
 k3s_tls_san: []

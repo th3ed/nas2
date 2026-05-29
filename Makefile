@@ -1,4 +1,6 @@
-.PHONY: ping check apply apply-tags deps k8s-bootstrap argo-sync argo-status kubeconfig laptop-setup
+K3S_SERVER ?= nas2
+
+.PHONY: ping check apply apply-tags apply-host deps k8s-bootstrap argo-sync argo-status kubeconfig laptop-setup
 
 deps:
 	ansible-galaxy collection install -r requirements.yml
@@ -15,14 +17,17 @@ apply:
 apply-tags:
 	ansible-playbook playbook.yml --diff --tags "$(TAGS)"
 
+apply-host:
+	ansible-playbook playbook.yml --diff --limit $(HOST)
+
 k8s-bootstrap:
 	ansible-playbook playbook.yml --diff --tags kubernetes
 
 argo-sync:
-	ssh ed@nas2 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n argocd patch application root --type merge -p "{\"operation\":{\"sync\":{}}}"'
+	ssh ed@$(K3S_SERVER) 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl -n argocd patch application root --type merge -p "{\"operation\":{\"sync\":{}}}"'
 
 argo-status:
-	ssh ed@nas2 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get applications -n argocd'
+	ssh ed@$(K3S_SERVER) 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get applications -n argocd'
 
 laptop-setup:  ## Install local dev tools (bws CLI etc.) on this machine
 	ansible-playbook laptop.yml

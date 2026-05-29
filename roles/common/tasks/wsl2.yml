@@ -1,0 +1,20 @@
+---
+# WSL2 requires systemd to be enabled in /etc/wsl.conf for k3s and Tailscale
+# to run as services. This must be present before those roles install their units.
+# After this task runs, WSL2 must be restarted (wsl --shutdown) for systemd to
+# take effect if it was not already enabled.
+- name: Ensure [boot] section exists in /etc/wsl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/wsl.conf
+    line: "[boot]"
+    state: present
+    create: true
+    mode: "0644"
+
+- name: Ensure systemd=true in [boot] section of /etc/wsl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/wsl.conf
+    insertafter: "\\[boot\\]"
+    regexp: "^systemd="
+    line: "systemd=true"
+    state: present

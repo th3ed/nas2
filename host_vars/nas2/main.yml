@@ -1,0 +1,14 @@
+---
+k3s_node_role: server
+wsl2: false
+gpu_available: true
+
+k3s_tls_san:
+  - "nas2.taile9c9c.ts.net"
+
+# Routes advertised to the tailnet — lets laptop reach pod/service CIDRs directly.
+# After applying, approve at login.tailscale.com/admin/machines and run
+# `tailscale up --accept-routes` on the client.
+tailscale_advertise_routes:
+  - "10.42.0.0/16"  # k3s pod CIDR
+  - "10.43.0.0/16"  # k3s service CIDR

@@ -1,0 +1,12 @@
+---
+k3s_node_role: agent
+wsl2: true
+gpu_available: true
+
+# WSL2: nvidia_driver and cuda roles are skipped — the GPU driver lives in Windows.
+# Only nvidia_container_toolkit is installed to expose the GPU to the container runtime.
+
+k3s_server_url: "https://nas2.taile9c9c.ts.net:6443"
+
+# Desktop does not advertise pod/service CIDRs — nas2 (the server) handles this.
+tailscale_advertise_routes: []

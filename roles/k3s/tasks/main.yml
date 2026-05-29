@@ -37,18 +37,49 @@
     INSTALL_K3S_EXEC: "server {{ k3s_server_args | join(' ') }}"
   register: k3s_install
   changed_when: "'No change detected' not in k3s_install.stdout"
-  when: k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout
+  when: >
+    k3s_node_role == 'server' and
+    (k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout)
+
+- name: Fetch k3s cluster token from server
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/token
+  register: k3s_token_raw
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  when: k3s_node_role == 'agent'
+
+- name: Install k3s agent
+  ansible.builtin.command:
+    cmd: /usr/local/bin/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "agent {{ k3s_agent_args | join(' ') }}"
+    K3S_URL: "{{ k3s_server_url }}"
+    K3S_TOKEN: "{{ k3s_token_raw.content | b64decode | trim }}"
+  register: k3s_install
+  changed_when: "'No change detected' not in k3s_install.stdout"
+  when: >
+    k3s_node_role == 'agent' and
+    (k3s_installed_version.rc != 0 or k3s_version not in k3s_installed_version.stdout)
 
 - name: Flush handlers to restart k3s before readiness checks
   ansible.builtin.meta: flush_handlers
 
-- name: Wait for k3s API to be ready
+- name: Wait for k3s API to be ready (server)
   ansible.builtin.wait_for:
     port: 6443
     host: 127.0.0.1
     timeout: 120
+  when: k3s_node_role == 'server'
 
-- name: Wait for node to be Ready
+- name: Wait for kubelet to be ready (agent)
+  ansible.builtin.wait_for:
+    port: 10250
+    host: 127.0.0.1
+    timeout: 120
+  when: k3s_node_role == 'agent'
+
+- name: Wait for node to be Ready (server)
   ansible.builtin.command:
     cmd: "k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=120s"
   changed_when: false
@@ -56,6 +87,18 @@
   delay: 10
   register: k3s_node_ready
   until: k3s_node_ready.rc == 0
+  when: k3s_node_role == 'server'
+
+- name: Wait for node to be Ready (agent — check from server)
+  ansible.builtin.command:
+    cmd: "k3s kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=120s"
+  changed_when: false
+  retries: 5
+  delay: 10
+  register: k3s_agent_node_ready
+  until: k3s_agent_node_ready.rc == 0
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  when: k3s_node_role == 'agent'
 
 - name: Check if nvidia-ctk is available
   ansible.builtin.stat:

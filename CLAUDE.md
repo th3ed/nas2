@@ -4,14 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo purpose
 
-Single-node, GPU-accelerated home server (`nas2`, Ubuntu 24.04). Ansible bootstraps the host; everything user-facing then runs in Kubernetes (k3s) and is managed by Argo CD. There is one inventory host and one cluster node.
+GPU-accelerated home lab. Ansible bootstraps hosts; everything user-facing runs in Kubernetes (k3s) managed by Argo CD.
+
+**Current nodes:**
+- `nas2` — Ubuntu 24.04, k3s server (control-plane + etcd), RTX GPU, bare-metal
+- `desktop` — Ubuntu 24.04 (WSL2), k3s agent (worker-only), RTX5080
+
+**Adding a new host:** create one inventory entry in `inventory/hosts.yml` under the appropriate group (`k3s_servers` or `k3s_agents`) and a `host_vars/<name>/main.yml` with `k3s_node_role`, `wsl2`, `gpu_available`, and any host-specific overrides.
 
 > The top-level `README.md` is partially stale: it still describes `ollama`, `openclaw`, and `caddy` as Ansible roles. Those roles were removed (commit `890344a`) and the workloads now live as Argo CD Applications under `gitops/`. Trust `playbook.yml` and `gitops/apps/` over the README when they disagree.
 
 ## Two-layer architecture
 
 **Layer 1 — Ansible (host setup, run from your laptop):**
-`playbook.yml` applies these roles in order: `common`, `console_font`, `nvidia_driver`, `docker`, `nvidia_container_toolkit`, `cuda`, `tailscale`, `k3s`, `kubectl`, `argocd_bootstrap`, `user_shell`, `claude_code`, `wifi`, `firewall`. Order matters: `nvidia_driver` may trigger a reboot before the toolkit/CUDA roles run, and `argocd_bootstrap` requires `k3s` + `kubectl` already installed.
+`playbook.yml` has two plays:
+
+- **Play 1 — `k3s_servers`:** `common`, `console_font`, `nvidia_driver`, `docker`, `nvidia_container_toolkit`, `cuda`, `tailscale`, `k3s`, `kubectl`, `argocd_bootstrap`, `user_shell`, `claude_code`, `wifi`, `firewall`. Order matters: `nvidia_driver` may trigger a reboot before the toolkit/CUDA roles run, and `argocd_bootstrap` requires `k3s` + `kubectl` already installed.
+- **Play 2 — `k3s_agents`:** `common`, `docker`, `nvidia_container_toolkit`, `tailscale`, `k3s`, `user_shell`, `firewall`. The `nvidia_driver` and `cuda` roles are omitted — WSL2 agent nodes get GPU access from the Windows host driver; installing the Linux driver would break GPU passthrough.
+
+Per-host configuration lives in `host_vars/<name>/main.yml` (key variables: `k3s_node_role`, `wsl2`, `k3s_server_url`, `k3s_tls_san`, `tailscale_advertise_routes`).
 
 **Layer 2 — Argo CD app-of-apps (cluster workloads, reconciled from this repo):**
 `argocd_bootstrap` installs Argo CD via Helm and applies a single root `Application` (`templates/root-app.yaml.j2`) that points at `gitops/apps/`. Every file in that directory is an `Application` that Argo picks up automatically — adding a new app is just dropping a new YAML there.
@@ -200,6 +211,7 @@ Health checks: add liveness/readiness probes in Deployment manifests where the u
 
 ## Gotchas worth remembering
 
+- **WSL2 GPU driver — do not install nvidia_driver/cuda on WSL2 nodes**: On WSL2, the NVIDIA kernel driver lives in Windows. Installing the Linux `nvidia-driver`/CUDA packages inside WSL2 will break the GPU passthrough. Only `nvidia_container_toolkit` is needed — it integrates the Windows-provided GPU into containerd. The `desktop` host_vars sets `wsl2: true`, which causes Play 2 to skip those roles. If you add another WSL2 node, always set `wsl2: true` in its host_vars.
 - **MetalLB CRD drift**: MetalLB's controller writes its own `caBundle` and `service.port` into the `bgppeers` CRD's conversion webhook config after Argo applies. Don't fight it — the `metallb` Application has an `ignoreDifferences` block for `apiextensions.k8s.io/CustomResourceDefinition` that must be preserved (commit `fd79a4c`).
 - **Argo CD Helm values drift**: `gitops/apps/argocd-self.yaml` keeps `server.extraArgs: [--insecure]` to match what the Ansible bootstrap installs. If you change one, change both — Argo's self-heal will otherwise flap.
 - **Tailscale Operator OAuth Secret**: `gitops/manifests/tailscale-operator/values.yaml` deliberately does **not** set `oauth.clientId` / `oauth.clientSecret`. The chart only creates the OAuth Secret when those are non-empty; the bootstrap role pre-creates `tailscale/operator-oauth` and we want it to stay authoritative.

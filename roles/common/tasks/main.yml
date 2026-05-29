@@ -32,3 +32,7 @@
   loop:
     - { name: fs.inotify.max_user_instances, value: "8192" }
     - { name: fs.inotify.max_user_watches,   value: "524288" }
+
+- name: Configure WSL2 systemd
+  ansible.builtin.include_tasks: wsl2.yml
+  when: wsl2 | default(false)
