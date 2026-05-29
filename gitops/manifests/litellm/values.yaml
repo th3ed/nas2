@@ -96,6 +96,16 @@ proxy_config:
         model: "openrouter/z-ai/glm-5.1"
         api_key: "os.environ/OPENROUTER_API_KEY"
         guardrails: ["presidio-pii"]
+    - model_name: "deepseek-v4-flash"
+      litellm_params:
+        model: "openrouter/deepseek/deepseek-v4-flash"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
+    - model_name: "deepseek-v4-pro"
+      litellm_params:
+        model: "openrouter/deepseek/deepseek-v4-pro"
+        api_key: "os.environ/OPENROUTER_API_KEY"
+        guardrails: ["presidio-pii"]
     # Gemini free-tier models via Google AI Studio. presidio-pii guardrail masks
     # PII before requests leave the tailnet (same policy as OpenRouter models).
     - model_name: "gemini-2.5-flash"
