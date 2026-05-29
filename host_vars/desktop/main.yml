@@ -7,6 +7,9 @@ gpu_available: true
 # Only nvidia_container_toolkit is installed to expose the GPU to the container runtime.
 
 k3s_server_url: "https://nas2.taile9c9c.ts.net:6443"
+# Tailscale IP registered as this node's InternalIP — flannel uses it as the VXLAN
+# VTEP so nas2 can route pod-subnet traffic to the desktop via Tailscale.
+k3s_node_ip: "100.123.38.22"
 
 # Desktop does not advertise pod/service CIDRs — nas2 (the server) handles this.
 tailscale_advertise_routes: []

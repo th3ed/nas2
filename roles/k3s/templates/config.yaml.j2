@@ -10,3 +10,6 @@ tls-san:
 advertise-address: "{{ k3s_advertise_address }}"
 {% endif %}
 {% endif %}
+{% if k3s_node_ip %}
+node-ip: "{{ k3s_node_ip }}"
+{% endif %}

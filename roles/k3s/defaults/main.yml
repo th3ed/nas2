@@ -29,3 +29,7 @@ k3s_tls_san: []
 # Defaults to the primary LAN IP; override to the Tailscale IP when agents
 # connect via Tailscale and cannot reach the LAN IP (e.g. WSL2 agents).
 k3s_advertise_address: ""
+
+# IP registered as the node's InternalIP and used by flannel as the VXLAN VTEP.
+# Override to the Tailscale IP when cross-node pod routing must go via Tailscale.
+k3s_node_ip: ""
