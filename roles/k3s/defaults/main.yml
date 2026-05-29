@@ -24,3 +24,8 @@ k3s_kubeconfig_path: /etc/rancher/k3s/k3s.yaml
 # k3s to regenerate its serving cert on next restart. Set in host_vars for servers;
 # agents leave this empty.
 k3s_tls_san: []
+
+# IP address advertised to cluster nodes as the server's API endpoint.
+# Defaults to the primary LAN IP; override to the Tailscale IP when agents
+# connect via Tailscale and cannot reach the LAN IP (e.g. WSL2 agents).
+k3s_advertise_address: ""

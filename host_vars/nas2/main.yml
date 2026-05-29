@@ -6,6 +6,12 @@ gpu_available: true
 k3s_tls_san:
   - "nas2.taile9c9c.ts.net"
 
+# Advertise the Tailscale IP so agent nodes that connect via Tailscale get a
+# reachable endpoint in the default/kubernetes service (KUBE-SEP DNAT chain).
+# Without this, the endpoint defaults to the LAN IP (192.168.111.x), which
+# WSL2 agents cannot reach.
+k3s_advertise_address: "100.115.201.106"
+
 # Routes advertised to the tailnet — lets laptop reach pod/service CIDRs directly.
 # After applying, approve at login.tailscale.com/admin/machines and run
 # `tailscale up --accept-routes` on the client.
