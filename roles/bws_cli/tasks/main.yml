@@ -1,0 +1,26 @@
+---
+- name: Check if bws is already at target version
+  ansible.builtin.command: bws --version
+  register: bws_installed
+  failed_when: false
+  changed_when: false
+
+- name: Install bws CLI from GitHub releases
+  when: bws_installed.rc != 0 or bws_cli_version not in bws_installed.stdout
+  block:
+    - name: Download bws zip
+      ansible.builtin.get_url:
+        url: "https://github.com/bitwarden/sdk-sm/releases/download/bws-v{{ bws_cli_version }}/bws-macos-universal-{{ bws_cli_version }}.zip"
+        dest: "/tmp/bws-{{ bws_cli_version }}.zip"
+        mode: "0644"
+
+    - name: Unzip bws binary
+      ansible.builtin.unarchive:
+        src: "/tmp/bws-{{ bws_cli_version }}.zip"
+        dest: "{{ bws_cli_install_dir }}"
+        mode: "0755"
+
+    - name: Clean up zip
+      ansible.builtin.file:
+        path: "/tmp/bws-{{ bws_cli_version }}.zip"
+        state: absent

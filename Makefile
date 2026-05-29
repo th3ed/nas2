@@ -1,4 +1,4 @@
-.PHONY: ping check apply apply-tags deps k8s-bootstrap argo-sync argo-status kubeconfig
+.PHONY: ping check apply apply-tags deps k8s-bootstrap argo-sync argo-status kubeconfig laptop-setup
 
 deps:
 	ansible-galaxy collection install -r requirements.yml
@@ -23,6 +23,9 @@ argo-sync:
 
 argo-status:
 	ssh ed@nas2 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get applications -n argocd'
+
+laptop-setup:  ## Install local dev tools (bws CLI etc.) on this machine
+	ansible-playbook laptop.yml
 
 kubeconfig:
 	@mkdir -p ~/.kube
