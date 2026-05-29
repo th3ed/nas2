@@ -18,3 +18,32 @@
     regexp: "^systemd="
     line: "systemd=true"
     state: present
+
+# WSL2's root mount is private by default. Containers using HostToContainer or
+# Bidirectional mount propagation (node-exporter, NFD worker) fail with
+# "path / is not a shared or slave mount". A one-shot systemd unit runs
+# `mount --make-rshared /` at boot to fix this. Required by k3s on WSL2:
+# https://docs.k3s.io/installation/requirements#wsl2
+- name: Install mount-rshared systemd unit for WSL2
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/k3s-wsl2-rshared.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Make root mount shared (required for k3s/containerd on WSL2)
+      Before=k3s-agent.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/mount --make-rshared /
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable and start k3s-wsl2-rshared service
+  ansible.builtin.systemd:
+    name: k3s-wsl2-rshared.service
+    enabled: true
+    state: started
+    daemon_reload: true
