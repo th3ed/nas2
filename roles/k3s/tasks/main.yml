@@ -100,6 +100,31 @@
   delegate_to: "{{ groups['k3s_servers'][0] }}"
   when: k3s_node_role == 'agent'
 
+# Sets the flannel VXLAN destination peers use for this node. Necessary on
+# servers whose --node-ip can't be changed post-bootstrap (changing it rewrites
+# the etcd peer URL). Delegated to the server because every server has a
+# kubeconfig at /etc/rancher/k3s/k3s.yaml.
+- name: Annotate node with flannel public-ip
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl annotate node {{ inventory_hostname }}
+      flannel.alpha.coreos.com/public-ip={{ k3s_flannel_public_ip }}
+      --overwrite
+  register: ann_result
+  changed_when: "'no change' not in ann_result.stdout"
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  when: k3s_flannel_public_ip | length > 0
+
+- name: Apply extra node labels
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl label node {{ inventory_hostname }}
+      {{ item.key }}={{ item.value }} --overwrite
+  register: lbl_result
+  changed_when: "'not labeled' not in lbl_result.stdout"
+  delegate_to: "{{ groups['k3s_servers'][0] }}"
+  loop: "{{ k3s_node_labels | dict2items }}"
+
 - name: Check if nvidia-ctk is available
   ansible.builtin.stat:
     path: /usr/bin/nvidia-ctk

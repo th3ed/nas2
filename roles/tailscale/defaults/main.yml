@@ -4,3 +4,10 @@ tailscale_apt_release: noble
 # Routes to advertise on the Tailscale network. After applying, approve them in
 # the Tailscale admin console and run `tailscale up --accept-routes` on the client.
 tailscale_advertise_routes: []
+
+# Whether this host accepts subnet routes advertised by other tailnet peers.
+# Set to false on k3s agent nodes: they have direct access to the cluster pod/
+# service CIDRs via their own flannel interface, and accepting the advertised
+# 10.42.0.0/16 / 10.43.0.0/16 routes shadows flannel.1, sending pod traffic
+# through Tailscale where it loops back through the API server's DNAT chain.
+tailscale_accept_routes: true

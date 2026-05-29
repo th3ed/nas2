@@ -32,4 +32,26 @@ k3s_advertise_address: ""
 
 # IP registered as the node's InternalIP and used by flannel as the VXLAN VTEP.
 # Override to the Tailscale IP when cross-node pod routing must go via Tailscale.
+# CAUTION: Changing this on an existing server rewrites the etcd peer URL and
+# breaks the cluster. Use k3s_flannel_public_ip on existing servers instead.
 k3s_node_ip: ""
+
+# Externally-reachable IP (Tailscale, NAT, etc.). Surfaces on Node.status.addresses
+# as ExternalIP and is used as a flannel destination fallback.
+k3s_node_external_ip: ""
+
+# Network interface that flannel binds VXLAN to. Set to "tailscale0" when nodes
+# span L3 boundaries via Tailscale — flannel sources VXLAN from the Tailscale IP
+# and auto-adjusts MTU for the WireGuard overhead.
+k3s_flannel_iface: ""
+
+# Public IP that other nodes use as this node's VXLAN destination. Sets the
+# flannel.alpha.coreos.com/public-ip node annotation post-install. Required on
+# servers where k3s_node_ip can't be changed (etcd peer URL is sticky).
+k3s_flannel_public_ip: ""
+
+# Extra node labels applied post-install. Useful for synthesizing NFD labels on
+# nodes where the discovery source can't see the hardware — e.g. WSL2 hides the
+# NVIDIA GPU from the PCI bus, so gpu-operator never auto-applies its deploy
+# labels and we set feature.node.kubernetes.io/pci-10de.present manually.
+k3s_node_labels: {}

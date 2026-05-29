@@ -44,11 +44,18 @@
 
 - name: Join tailnet
   ansible.builtin.command:
-    cmd: "tailscale up --authkey={{ tailscale_authkey }} --accept-routes"
+    cmd: "tailscale up --authkey={{ tailscale_authkey }} --accept-routes={{ tailscale_accept_routes | string | lower }}"
   register: ts_up
   changed_when: true
   no_log: true
   when: (ts_status_raw.stdout | default('{}') | from_json).get('BackendState', '') != 'Running'
+
+# Idempotently sync accept-routes on an already-connected node so changing the
+# var (e.g. flipping a k3s agent to false) takes effect without re-auth.
+- name: Sync tailscale accept-routes setting
+  ansible.builtin.command:
+    cmd: "tailscale set --accept-routes={{ tailscale_accept_routes | string | lower }}"
+  changed_when: true
 
 - name: Check current advertised routes
   ansible.builtin.command: tailscale status --json

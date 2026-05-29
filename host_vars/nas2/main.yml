@@ -11,9 +11,18 @@ k3s_tls_san:
 # Without this, the endpoint defaults to the LAN IP (192.168.111.x), which
 # WSL2 agents cannot reach.
 k3s_advertise_address: "100.115.201.106"
-# Tailscale IP registered as this node's InternalIP — flannel uses it as the VXLAN
-# VTEP so agent nodes (WSL2 desktop) can resolve pod-subnet routes via Tailscale.
-k3s_node_ip: "100.115.201.106"
+
+# Pin node-ip to the LAN IP that etcd was originally bootstrapped with.
+# Without this, setting flannel-iface=tailscale0 causes k3s to auto-derive
+# node-ip from tailscale0 (100.115.201.106) and refuse to start because the
+# etcd peer URL is permanently pinned to https://192.168.111.98:2380.
+k3s_node_ip: "192.168.111.98"
+
+# Flannel binds VXLAN to tailscale0 so pod traffic between nodes traverses the
+# tailnet. Other nodes use k3s_flannel_public_ip (set via annotation) as this
+# node's VXLAN destination instead of the node-ip.
+k3s_flannel_iface: "tailscale0"
+k3s_flannel_public_ip: "100.115.201.106"
 
 # Routes advertised to the tailnet — lets laptop reach pod/service CIDRs directly.
 # After applying, approve at login.tailscale.com/admin/machines and run

@@ -7,9 +7,25 @@ gpu_available: true
 # Only nvidia_container_toolkit is installed to expose the GPU to the container runtime.
 
 k3s_server_url: "https://nas2.taile9c9c.ts.net:6443"
-# Tailscale IP registered as this node's InternalIP — flannel uses it as the VXLAN
-# VTEP so nas2 can route pod-subnet traffic to the desktop via Tailscale.
-k3s_node_ip: "100.123.38.22"
+
+# Flannel binds VXLAN to tailscale0 and uses the Tailscale IP as the peer VTEP.
+# k3s_node_ip is intentionally unset here too — the annotation is sufficient and
+# keeps the nas2/desktop config symmetric.
+k3s_flannel_iface: "tailscale0"
+k3s_flannel_public_ip: "100.123.38.22"
+k3s_node_external_ip: "100.123.38.22"
+
+# WSL2 hides the NVIDIA GPU from the PCI bus, so NFD never sets the pci-10de
+# label that gpu-operator gates its DaemonSets on. Apply it manually so
+# gpu-feature-discovery, device-plugin, etc. schedule here.
+k3s_node_labels:
+  feature.node.kubernetes.io/pci-10de.present: "true"
 
 # Desktop does not advertise pod/service CIDRs — nas2 (the server) handles this.
 tailscale_advertise_routes: []
+
+# Don't accept tailnet-advertised routes. nas2 advertises 10.42.0.0/16 and
+# 10.43.0.0/16 for the laptop's benefit; if the desktop accepts them, those
+# CIDRs get routed via tailscale0 (Tailscale policy table 52), shadowing
+# flannel.1 and breaking pod-to-pod traffic.
+tailscale_accept_routes: false
