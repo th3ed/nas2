@@ -179,6 +179,26 @@ data:
         - segment-anything
         - weights-and-biases
 
+    # Remote MCP servers Hermes connects to at startup. The schema and
+    # tools.{resources,prompts} semantics are documented at
+    # https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference
+    # — Hermes performs the MCP handshake and registers each tool the
+    # remote exposes alongside its built-in tools and skills.
+    #
+    # memory: self-hosted Mem0 + FastMCP wrapper. In-cluster only at this
+    # URL (AUTH_DISABLED on the backend; the tailnet/cluster network is
+    # the boundary). Exposes memory_add / memory_search / memory_get /
+    # memory_list / memory_update / memory_delete for cross-session user
+    # facts and preferences. See gitops/manifests/mem0/.
+    mcp_servers:
+      memory:
+        url: http://mem0-mcp.mem0:8080/mcp/
+        timeout: 60
+        connect_timeout: 30
+        tools:
+          resources: false
+          prompts: false
+
     # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
     # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
     # reads from the envFrom-injected hermes-secrets Secret. Long-polling

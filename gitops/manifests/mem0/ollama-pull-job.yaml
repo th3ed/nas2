@@ -1,0 +1,43 @@
+---
+# One-shot Job that asks the in-cluster Ollama instance to pull
+# nomic-embed-text (768-dim) — Mem0's embedder hits this model via
+# LiteLLM's `text-embedding-3-small` alias.
+#
+# Argo runs this on every sync because of the Sync hook; the
+# hook-delete-policy clears the previous Job so re-runs aren't blocked
+# by Job immutability. Ollama's /api/pull is idempotent: if the model
+# is already present it returns immediately.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mem0-ollama-pull-embed
+  namespace: mem0
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "14"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pull
+          # curlimages/curl is small and includes only curl — no shell
+          # surprises, no apt update step needed.
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "INFO: requesting ollama pull nomic-embed-text"
+              # /api/pull streams NDJSON status lines until completion.
+              # -N disables buffering so the log tail shows progress;
+              # --fail-with-body returns a useful error on non-2xx.
+              curl -N --fail-with-body \
+                -X POST http://ollama.ollama:11434/api/pull \
+                -H 'Content-Type: application/json' \
+                -d '{"name":"nomic-embed-text","stream":false}'
+              echo
+              echo "INFO: pull complete"

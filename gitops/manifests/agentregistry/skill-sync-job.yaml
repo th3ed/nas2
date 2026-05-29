@@ -1,8 +1,9 @@
 ---
-# Argo Sync hook Job: POSTs every entry in skill-catalog ConfigMap to the
-# registry's `/v0/skills` endpoint (idempotent — "Create or update skill"),
-# then triggers a Hermes rollout so the new catalog is pulled by Hermes's
-# `install-registry-skills` init container on the next pod start.
+# Argo Sync hook Job: POSTs every entry in skill-catalog AND
+# mcp-server-catalog ConfigMaps to the registry (`/v0/skills` and
+# `/v0/servers`, both idempotent), then triggers a Hermes rollout so the
+# new catalog is pulled by Hermes's `install-registry-skills` init
+# container on the next pod start.
 #
 # Why a Sync hook and not a regular Job manifest: standard k8s Jobs are
 # immutable once created. By using `hook: Sync` + `hook-delete-policy:
@@ -19,7 +20,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: skill-registry-sync
+  name: registry-sync
   namespace: agentregistry
   annotations:
     argocd.argoproj.io/hook: Sync
@@ -31,7 +32,7 @@ spec:
   template:
     metadata:
       labels:
-        app: skill-sync
+        app: registry-sync
     spec:
       restartPolicy: OnFailure
       serviceAccountName: skill-sync
@@ -57,25 +58,36 @@ spec:
               done
               curl -fsS "${REGISTRY}/v0/health" >/dev/null
 
-              skills_json=/skills/skills.json
-              count=$(jq 'length' "$skills_json")
-              echo "INFO: registering $count skill(s) from skill-catalog ConfigMap"
+              post_catalog() {
+                local json=$1 endpoint=$2 kind=$3
+                local count
+                count=$(jq 'length' "$json")
+                echo "INFO: registering $count ${kind}(s) at ${endpoint}"
 
-              # POST one skill at a time so a single bad entry doesn't poison
-              # the rest. Server is idempotent on (name, version).
-              jq -c '.[]' "$skills_json" | while read -r entry; do
-                name=$(echo "$entry" | jq -r '.name')
-                http=$(echo "$entry" | curl -sS -o /tmp/resp -w '%{http_code}' \
-                  -X POST -H 'Content-Type: application/json' \
-                  --data-binary @- "${REGISTRY}/v0/skills")
-                if [ "$http" = "200" ] || [ "$http" = "201" ]; then
-                  echo "OK: $name (http=$http)"
-                else
-                  echo "FAIL: $name (http=$http)"
-                  cat /tmp/resp
-                  exit 1
-                fi
-              done
+                # POST one entry at a time so a single bad row doesn't poison
+                # the rest. Server is idempotent on (name, version).
+                jq -c '.[]' "$json" | while read -r entry; do
+                  name=$(echo "$entry" | jq -r '.name')
+                  http=$(echo "$entry" | curl -sS -o /tmp/resp -w '%{http_code}' \
+                    -X POST -H 'Content-Type: application/json' \
+                    --data-binary @- "${REGISTRY}${endpoint}")
+                  if [ "$http" = "200" ] || [ "$http" = "201" ]; then
+                    echo "OK: $kind $name (http=$http)"
+                  elif [ "$http" = "400" ] && grep -q 'duplicate version' /tmp/resp; then
+                    # Registry rejects re-POSTing the same name+version with
+                    # 400 "cannot publish duplicate version". Treat as a
+                    # no-op success — the entry is already in place.
+                    echo "SKIP: $kind $name already at this version"
+                  else
+                    echo "FAIL: $kind $name (http=$http)"
+                    cat /tmp/resp
+                    exit 1
+                  fi
+                done
+              }
+
+              post_catalog /skills/skills.json   /v0/skills  skill
+              post_catalog /servers/servers.json /v0/servers server
 
               # Rollout-restart triggers Hermes's install-registry-skills init
               # container to re-query the registry and re-clone skills.
@@ -89,12 +101,18 @@ spec:
                 echo "WARN: rollout-restart failed; hermes will fetch on next pod start"
               fi
 
-              echo "INFO: skill-sync done"
+              echo "INFO: registry-sync done"
           volumeMounts:
             - name: skills
               mountPath: /skills
+              readOnly: true
+            - name: servers
+              mountPath: /servers
               readOnly: true
       volumes:
         - name: skills
           configMap:
             name: skill-catalog
+        - name: servers
+          configMap:
+            name: mcp-server-catalog

@@ -1,0 +1,129 @@
+---
+# Mem0 + FastMCP, single container. The initContainer pip-installs
+# mem0ai + mcp + their transitive deps into /pkg (an emptyDir shared
+# with the main container), so the main container is a vanilla
+# python:3.12-slim. The wrapper script comes from a ConfigMap.
+#
+# Why initContainer + emptyDir instead of a baked image: Mem0 doesn't
+# publish a server image, building/pushing our own would need a CI
+# pipeline the repo doesn't have today, and the script-as-ConfigMap +
+# pip-install-at-pod-start pattern already exists for LiteLLM's
+# callbacks. ~30s pip cost on pod start is acceptable for a service
+# that restarts maybe weekly.
+#
+# Strategy Recreate: only one Postgres backend, and the FastMCP
+# streamable-http session state is in-process — rolling two pods would
+# race the same DB connection pool and split MCP sessions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mem0-mcp
+  namespace: mem0
+  labels:
+    app.kubernetes.io/name: mem0-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mem0-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mem0-mcp
+    spec:
+      initContainers:
+        - name: pip-install
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              # --target keeps everything in /pkg so the main container can
+              # set PYTHONPATH and run without modifying its own image.
+              # Pin major versions; Renovate will track patch bumps.
+              pip install --no-cache-dir --target /pkg \
+                'mem0ai>=0.1.117,<1' \
+                'mcp>=1.2,<2' \
+                'psycopg2-binary>=2.9,<3' \
+                'pgvector>=0.3,<1' \
+                'httpx>=0.27,<1'
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+      containers:
+        - name: mem0-mcp
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/mem0_mcp.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PYTHONPATH
+              value: /pkg
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: MEM0_PG_HOST
+              value: mem0-postgres.mem0
+            - name: MEM0_PG_PORT
+              value: "5432"
+            - name: MEM0_PG_DB
+              value: postgres
+            - name: MEM0_PG_USER
+              value: postgres
+            - name: LITELLM_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: MEM0_LLM_MODEL
+              value: gemma4:e4b
+            - name: MEM0_EMBED_MODEL
+              value: text-embedding-3-small
+            - name: MEM0_EMBED_DIMS
+              value: "768"
+            - name: MEM0_DEFAULT_USER_ID
+              value: ed
+            # Streamable-HTTP transport defaults FastMCP listens on 0.0.0.0
+            # and serves at /mcp; the underlying Starlette app reads these.
+            - name: FASTMCP_HOST
+              value: 0.0.0.0
+            - name: FASTMCP_PORT
+              value: "8080"
+          envFrom:
+            - secretRef:
+                name: mem0-secrets
+                optional: false
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+              readOnly: true
+            - name: script
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            # MCP streamable-http rejects probes without
+            # `Accept: text/event-stream` with 406 (verified empirically),
+            # which kubelet's httpGet treats as failure. tcpSocket is the
+            # correct shape — port-bound = server-up.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: pkg
+          emptyDir: {}
+        - name: script
+          configMap:
+            name: mem0-mcp-script

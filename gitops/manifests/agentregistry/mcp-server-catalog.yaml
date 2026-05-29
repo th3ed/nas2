@@ -1,0 +1,46 @@
+---
+# Source of truth for MCP servers registered in AgentRegistry's /v0/servers.
+# Sibling to skill-catalog.yaml. Posted by the `registry-sync` Job hook on
+# every Argo sync (same hook that handles skills) — idempotent: the
+# server endpoint allows re-POSTing the same name+version with no error
+# beyond a no-op.
+#
+# Schema is the official MCP Registry shape that agentregistry v0.3.3
+# speaks. Two quirks worth knowing before adding entries:
+#
+#   1. `$schema` is required and pinned to a date-versioned URL
+#      (2025-10-17 is the current accepted version; older versions are
+#      rejected with "schema version ... not supported"). Update when
+#      the registry upgrades.
+#   2. `name` is a reverse-DNS namespaced identifier `<rev-domain>/<name>`,
+#      AND the server enforces that the namespace, when reversed, matches
+#      the host in `remotes[].url`. For in-cluster Services that means
+#      `<svc-name>.<ns>` reversed → `<ns>.<svc-name>`, i.e. `mem0.mem0-mcp`
+#      for the URL `http://mem0-mcp.mem0:8080/...`. Discovered by trial:
+#      sending `name: io.nas2/x` with `url: http://mem0-mcp.mem0/...`
+#      gets you "host mem0-mcp.mem0 does not match publisher domain
+#      nas2.io".
+#
+# Entry transport: `streamable-http` (not `transport_type: ...` — the
+# spec key is `type`). SSE works too if a server only speaks SSE.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-catalog
+  namespace: agentregistry
+data:
+  servers.json: |
+    [
+      {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+        "name": "mem0.mem0-mcp/memory",
+        "description": "Cross-session user facts via Mem0+pgvector: add, search, get, list, update, delete.",
+        "version": "1.0.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "http://mem0-mcp.mem0:8080/mcp/"
+          }
+        ]
+      }
+    ]
