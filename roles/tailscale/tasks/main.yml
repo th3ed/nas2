@@ -6,6 +6,18 @@
     mode: "0644"
   check_mode: false
 
+- name: Check for pre-existing Tailscale sources file
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/tailscale.list
+  register: tailscale_sources_file
+
+- name: Remove legacy Tailscale apt entry (old keyring path from manual installs)
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list.d/tailscale.list
+    regexp: 'signed-by=/usr/share/keyrings/tailscale-archive-keyring\.gpg'
+    state: absent
+  when: tailscale_sources_file.stat.exists
+
 - name: Add Tailscale apt repo
   ansible.builtin.apt_repository:
     repo: "deb [signed-by=/etc/apt/keyrings/tailscale.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ tailscale_apt_release }} main"
