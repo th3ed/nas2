@@ -28,10 +28,17 @@ spec:
   replicas: 1
   # Explicit defaults the apiserver would set anyway. Spelling them out
   # keeps Argo SSA diff from flagging them as drift on every reconcile.
+  # Argo normalizes most Deployment defaults but doesn't reach into a
+  # StatefulSet's volumeClaimTemplates or updateStrategy.
   podManagementPolicy: OrderedReady
+  revisionHistoryLimit: 10
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain
     whenScaled: Retain
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: mem0-postgres
@@ -40,13 +47,25 @@ spec:
       labels:
         app.kubernetes.io/name: mem0-postgres
     spec:
+      # Apiserver-defaulted PodSpec fields. Argo's normalizer fills these
+      # in for Deployments but not for StatefulSet pod templates, so the
+      # StatefulSet pins to OutOfSync every reconcile until we spell them
+      # out. Same root cause as the podManagementPolicy fix above.
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
       containers:
         - name: postgres
           image: ankane/pgvector:v0.5.1
           imagePullPolicy: IfNotPresent
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
           ports:
             - name: pg
               containerPort: 5432
+              protocol: TCP
           env:
             - name: POSTGRES_USER
               value: postgres
@@ -74,11 +93,17 @@ spec:
               command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
           resources:
             requests:
               cpu: 50m
@@ -89,15 +114,22 @@ spec:
         - name: init
           configMap:
             name: mem0-postgres-init
+            defaultMode: 420
         - name: dshm
           emptyDir:
             medium: Memory
             sizeLimit: 128Mi
   volumeClaimTemplates:
-    - metadata:
+    # apiVersion/kind/volumeMode are apiserver defaults on embedded PVC
+    # templates; Argo's StatefulSet normalizer doesn't fill them in, so
+    # without them the StatefulSet drifts on every reconcile.
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        volumeMode: Filesystem
         resources:
           requests:
             storage: 5Gi

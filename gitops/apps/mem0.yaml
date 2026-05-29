@@ -29,6 +29,21 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: mem0
+  # Three apiserver-default fields Argo can't normalize on StatefulSets:
+  #   - spec.template.metadata.creationTimestamp (null on every create)
+  #   - spec.volumeClaimTemplates[].metadata.creationTimestamp (same)
+  #   - spec.volumeClaimTemplates[].status (runtime PVC status leaks into
+  #     the StatefulSet object: e.g. {phase: Pending})
+  # The other ~13 defaulted PodSpec fields are spelled out in
+  # gitops/manifests/mem0/postgres.yaml; these three can't be cleanly
+  # written in git, so ignoreDifferences is the only correct fix.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jqPathExpressions:
+        - '.spec.template.metadata.creationTimestamp'
+        - '.spec.volumeClaimTemplates[].metadata.creationTimestamp'
+        - '.spec.volumeClaimTemplates[].status'
   syncPolicy:
     automated:
       prune: true

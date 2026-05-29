@@ -92,10 +92,18 @@ config = {
 }
 m = Memory.from_config(config)
 uid = "mem0-test-roundtrip"
-m.add(messages=[{"role": "user", "content": "The test fact is purple-elephant-42."}], user_id=uid)
-hits = m.search(query="purple elephant", user_id=uid, limit=5)
+# Use a natural-sounding preference — Mem0's LLM extractor will only
+# remember things it judges as salient facts. Nonsense strings like
+# "purple-elephant-42" get filtered out by the extractor.
+m.add(messages=[{"role": "user", "content": "I always drink my coffee with oat milk."}], user_id=uid)
+hits = m.search(query="coffee preference", user_id=uid, limit=5)
 results = hits.get("results", hits) if isinstance(hits, dict) else hits
-found = any("purple-elephant-42" in (h.get("memory") or "") for h in results)
+# Extracted form will be something like "Drinks coffee with oat milk" —
+# look for the core nouns rather than the literal input string.
+def _has_terms(text, terms):
+    text = (text or "").lower()
+    return all(t in text for t in terms)
+found = any(_has_terms(h.get("memory"), ["coffee", "oat"]) for h in results)
 # Best-effort cleanup so repeat test runs start clean.
 try:
     for h in results:
