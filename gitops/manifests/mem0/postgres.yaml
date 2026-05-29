@@ -26,6 +26,12 @@ metadata:
 spec:
   serviceName: mem0-postgres
   replicas: 1
+  # Explicit defaults the apiserver would set anyway. Spelling them out
+  # keeps Argo SSA diff from flagging them as drift on every reconcile.
+  podManagementPolicy: OrderedReady
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   selector:
     matchLabels:
       app.kubernetes.io/name: mem0-postgres
