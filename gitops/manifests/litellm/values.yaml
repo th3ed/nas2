@@ -68,14 +68,12 @@ proxy_config:
       litellm_params:
         model: "ollama/nomic-embed-text"
         api_base: "http://ollama.ollama:11434"
-    # Stronger embedding model for the news-rag pipeline. 1024-dim,
-    # multilingual, 8k-token context. Pulled by the news-rag
-    # ollama-pull-job. article_chunks.embedding column is vector(1024)
-    # to match.
-    - model_name: "bge-m3"
-      litellm_params:
-        model: "ollama/bge-m3"
-        api_base: "http://ollama.ollama:11434"
+    # bge-m3 (1024-dim) was added here for news-rag but rolled back —
+    # see gitops/manifests/news-rag/postgres-init-configmap.yaml: the
+    # nas2 RTX (10 GB) can't fit bge-m3's 8192-token batch alongside
+    # the loaded chat models, so news-rag uses text-embedding-3-small
+    # (nomic-embed-text, 768-dim) like mem0 does. Re-add this alias if
+    # a larger-VRAM GPU becomes the embed target.
     # OpenRouter-backed cloud models. Each carries the presidio-pii guardrail
     # so prompts are masked before leaving the tailnet and unmasked on the
     # way back (output_parse_pii=True). Local ollama entries above stay raw.

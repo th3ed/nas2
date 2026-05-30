@@ -38,13 +38,21 @@ data:
     CREATE INDEX IF NOT EXISTS articles_feed_idx      ON articles (feed_id, published_at DESC);
     CREATE INDEX IF NOT EXISTS articles_category_idx  ON articles (category, published_at DESC);
 
-    -- One row per chunk. embedding is the bge-m3 vector (1024 dims).
+    -- One row per chunk. embedding is nomic-embed-text (768 dim).
+    -- We initially designed for bge-m3 (1024 dim) but the nas2 RTX
+    -- (10 GB total VRAM) can't fit bge-m3's 8192-token batch buffer
+    -- alongside the chat models that are already loaded (gemma4:e4b
+    -- alone takes ~6 GB of GPU). nomic-embed-text fits comfortably
+    -- (~600 MB on GPU), is already pulled, and is what mem0 uses.
+    -- Bumping back to 1024 is a one-line change + re-ingest later
+    -- if the GPU situation changes (eg desktop's RTX 5080 becomes
+    -- DNS-reachable for embedding traffic).
     CREATE TABLE IF NOT EXISTS article_chunks (
       id          BIGSERIAL PRIMARY KEY,
       article_id  TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
       chunk_index INT NOT NULL,
       text        TEXT NOT NULL,
-      embedding   vector(1024) NOT NULL,
+      embedding   vector(768) NOT NULL,
       UNIQUE (article_id, chunk_index)
     );
     CREATE INDEX IF NOT EXISTS article_chunks_hnsw ON article_chunks

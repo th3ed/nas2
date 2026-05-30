@@ -68,7 +68,9 @@ spec:
             - name: LITELLM_BASE_URL
               value: http://litellm.litellm:4000/v1
             - name: MODEL_EMBEDDING
-              value: bge-m3
+              # Matches the CronJob — see cronjob.yaml for the rationale
+              # (nas2 GPU OOM on bge-m3, nomic-embed-text fits).
+              value: text-embedding-3-small
             - name: FASTMCP_HOST
               value: 0.0.0.0
             - name: FASTMCP_PORT

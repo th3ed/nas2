@@ -71,7 +71,13 @@ spec:
                 - name: LITELLM_BASE_URL
                   value: http://litellm.litellm:4000/v1
                 - name: MODEL_EMBEDDING
-                  value: bge-m3
+                  # Shares the LiteLLM alias mem0 uses. Switched from bge-m3
+                  # because nas2's GPU (10 GB) can't fit bge-m3's 8192-token
+                  # batch alongside the loaded chat models — Ollama crashes
+                  # with cudaMalloc OOM on first load. nomic-embed-text is
+                  # 768 dim (vs bge-m3's 1024); article_chunks.embedding
+                  # column is sized accordingly.
+                  value: text-embedding-3-small
                 - name: MODEL_SUMMARY
                   value: "gemma4:e4b"
                 - name: BACKFILL_DAYS

@@ -31,3 +31,31 @@ if [[ -z "${body// /}" ]]; then
     exit 1
 fi
 pass "$TITLE"
+
+TITLE="news-rag: tools/list exposes the seven expected tools"
+# Use the MCP pod itself (has the `mcp` python client lib already installed
+# in /pkg via the initContainer) to do an in-process streamable-http
+# handshake against localhost. Avoids needing an MCP client elsewhere.
+pod=$(ssh_kubectl "-n news-rag get pods -l app.kubernetes.io/name=news-rag-mcp -o name" | head -1)
+if [[ -z "$pod" ]]; then
+    fail "$TITLE: no news-rag-mcp pod"
+    exit 1
+fi
+tools_csv=$(ssh_kubectl "-n news-rag exec ${pod#pod/} -- env PYTHONPATH=/pkg python3 -c '
+import asyncio
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+async def main():
+    async with streamablehttp_client(\"http://localhost:8080/mcp/\") as (read, write, _):
+        async with ClientSession(read, write) as s:
+            await s.initialize()
+            r = await s.list_tools()
+            print(\",\".join(sorted(t.name for t in r.tools)))
+asyncio.run(main())
+' 2>&1" | tail -1)
+expected="get_article,get_briefing,list_feeds,list_recent,mark_read,search_articles,star"
+if [[ "$tools_csv" != "$expected" ]]; then
+    fail "$TITLE: got [$tools_csv], expected [$expected]"
+    exit 1
+fi
+pass "$TITLE"
