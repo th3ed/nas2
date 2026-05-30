@@ -160,6 +160,11 @@ data:
     )
 
     def summarize(title: str, body: str) -> str:
+        # gemma4:e4b emits reasoning_content (chain-of-thought) BEFORE the
+        # actual content. With a tight max_tokens budget the reasoning
+        # eats it all and the final `content` field comes back empty.
+        # Empirically 1500 was enough — going 2000 for safety since news
+        # articles vary in length.
         prompt = SUMMARY_PROMPT.format(title=title, body=body[:8000])
         r = httpx.post(
             f"{LITELLM_BASE}/chat/completions",
@@ -170,9 +175,9 @@ data:
             json={
                 "model": MODEL_SUMMARY,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 300,
+                "max_tokens": 2000,
             },
-            timeout=300,
+            timeout=600,
         )
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
