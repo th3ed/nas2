@@ -1,0 +1,98 @@
+---
+# Every 30 min, poll FreshRSS for new articles, extract bodies, embed
+# into pgvector, generate summaries. Idempotent on FreshRSS item-id.
+#
+# concurrencyPolicy: Forbid — a slow run (large backfill) must not get
+# double-scheduled and race the ingest_state row.
+#
+# python:3.12-slim + initContainer pip-install to /pkg (emptyDir shared
+# with main container), main container sets PYTHONPATH=/pkg. Same
+# pattern as mem0/deployment.yaml — avoids a custom image-build
+# pipeline; the ~30s pip cost on each run is acceptable at this cadence.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: news-rag-ingest
+  namespace: news-rag
+  labels:
+    app.kubernetes.io/name: news-rag-ingest
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: pip-install
+              image: python:3.12-slim
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  pip install --no-cache-dir --target /pkg \
+                    'httpx>=0.27,<1' \
+                    'trafilatura>=1.12,<3' \
+                    'psycopg2-binary>=2.9,<3' \
+                    'pgvector>=0.3,<1' \
+                    'lxml-html-clean>=0.4'
+              volumeMounts:
+                - name: pkg
+                  mountPath: /pkg
+          containers:
+            - name: ingest
+              image: python:3.12-slim
+              imagePullPolicy: IfNotPresent
+              command: ["python", "/app/ingest.py"]
+              env:
+                - name: PYTHONPATH
+                  value: /pkg
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+                - name: PG_HOST
+                  value: news-rag-postgres.news-rag
+                - name: PG_PORT
+                  value: "5432"
+                - name: PG_DB
+                  value: postgres
+                - name: PG_USER
+                  value: postgres
+                - name: LITELLM_BASE_URL
+                  value: http://litellm.litellm:4000/v1
+                - name: MODEL_EMBEDDING
+                  value: bge-m3
+                - name: MODEL_SUMMARY
+                  value: "gemma4:e4b"
+                - name: BACKFILL_DAYS
+                  value: "14"
+                - name: FETCH_BATCH
+                  value: "200"
+              envFrom:
+                - secretRef:
+                    name: news-rag-secrets
+                    optional: false
+              volumeMounts:
+                - name: pkg
+                  mountPath: /pkg
+                  readOnly: true
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: pkg
+              emptyDir: {}
+            - name: script
+              configMap:
+                name: news-rag-ingest-script
