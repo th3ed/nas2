@@ -29,7 +29,7 @@ relative strings (`24h`, `7d`, `2w`, `3m`). All filters compose with AND.
 Add the server with the `claude` CLI:
 
 ```bash
-claude mcp add news-rag --transport http https://news-rag-mcp.taile9c9c.ts.net/mcp/
+claude mcp add news-rag --transport http https://news-rag-mcp.taile9c9c.ts.net/mcp
 ```
 
 Or, equivalently, edit your project's `.mcp.json` (or `~/.claude.json` for a
@@ -40,7 +40,7 @@ user-scope entry):
   "mcpServers": {
     "news-rag": {
       "type": "http",
-      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp/"
+      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp"
     }
   }
 }
@@ -61,7 +61,7 @@ existing `provider` block from [docs/opencode-litellm.md](opencode-litellm.md)):
   "mcp": {
     "news-rag": {
       "type": "remote",
-      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp/",
+      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp",
       "enabled": true
     }
   }
@@ -86,14 +86,17 @@ Once connected:
 From a tailnet-connected laptop:
 
 ```bash
-# Server is up if this returns any body (MCP streamable-http 406s on
-# bare GETs; an empty 4xx body still proves the bind is working)
-curl -s -o /dev/null -w "%{http_code}\n" \
-  https://news-rag-mcp.taile9c9c.ts.net/mcp/
+# Server is up if this returns 405 with allow: GET, POST, DELETE.
+# (The bare GET is what proves the bind/route; an MCP handshake needs
+# a POST initialize.)
+curl -sI https://news-rag-mcp.taile9c9c.ts.net/mcp
 
-# To list tools manually via curl, send an MCP JSON-RPC initialize +
-# tools/list — easier to just connect through Claude Code or OpenCode
-# and let them do the handshake.
+# Manual MCP initialize (proves the full handshake works):
+curl -sN -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' \
+  https://news-rag-mcp.taile9c9c.ts.net/mcp
 ```
 
 ## Notes
