@@ -45,6 +45,15 @@ spec:
       labels:
         app.kubernetes.io/name: news-rag-postgres
     spec:
+      # Pinned to nas2: the desktop node (WSL2) can't resolve the
+      # private DNS for FRESHRSS_URL (cross-node CoreDNS forwarding
+      # returns empty for the andrews.casa zone — works from nas2
+      # pods, fails from desktop pods). Keeping the whole news-rag
+      # stack on nas2 alongside hermes/mem0/agentregistry where DNS
+      # works. The workload doesn't need GPU so desktop offers no
+      # advantage.
+      nodeSelector:
+        kubernetes.io/hostname: nas2
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler

@@ -24,6 +24,11 @@ spec:
       labels:
         app.kubernetes.io/name: news-rag-mcp
     spec:
+      # See postgres.yaml — pinning the whole news-rag stack to nas2
+      # because cross-node CoreDNS forwarding returns empty for the
+      # FreshRSS private domain from desktop pods.
+      nodeSelector:
+        kubernetes.io/hostname: nas2
       initContainers:
         - name: pip-install
           image: python:3.12-slim
