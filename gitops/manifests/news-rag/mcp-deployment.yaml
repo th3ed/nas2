@@ -1,0 +1,107 @@
+---
+# news-rag MCP server. Same shape as mem0-mcp: vanilla python:3.12-slim
+# + initContainer pip-install to /pkg, ConfigMap-mounted script at /app.
+#
+# Strategy Recreate: only one Postgres backend, and FastMCP's
+# streamable-http session state is in-process — rolling two pods would
+# race the same DB connection pool and split MCP sessions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-rag-mcp
+  namespace: news-rag
+  labels:
+    app.kubernetes.io/name: news-rag-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: news-rag-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: news-rag-mcp
+    spec:
+      initContainers:
+        - name: pip-install
+          image: python:3.12-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              pip install --no-cache-dir --target /pkg \
+                'mcp>=1.2,<2' \
+                'psycopg2-binary>=2.9,<3' \
+                'pgvector>=0.3,<1' \
+                'httpx>=0.27,<1'
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+      containers:
+        - name: news-rag-mcp
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/news_rag_mcp.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PYTHONPATH
+              value: /pkg
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PG_HOST
+              value: news-rag-postgres.news-rag
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DB
+              value: postgres
+            - name: PG_USER
+              value: postgres
+            - name: LITELLM_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: MODEL_EMBEDDING
+              value: bge-m3
+            - name: FASTMCP_HOST
+              value: 0.0.0.0
+            - name: FASTMCP_PORT
+              value: "8080"
+          envFrom:
+            - secretRef:
+                name: news-rag-secrets
+                optional: false
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+              readOnly: true
+            - name: script
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            # MCP streamable-http rejects probes without Accept: text/event-stream
+            # with 406 (see CLAUDE.md: empirically verified on mem0-mcp), which
+            # kubelet's httpGet treats as failure. tcpSocket = port-bound = up.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: pkg
+          emptyDir: {}
+        - name: script
+          configMap:
+            name: news-rag-mcp-script
