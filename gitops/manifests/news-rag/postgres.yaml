@@ -1,0 +1,124 @@
+---
+# pgvector backing store for the news-rag pipeline. Same image as mem0
+# (ankane/pgvector:v0.5.1) — proven in this cluster and ships the
+# extension binaries.
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-rag-postgres
+  namespace: news-rag
+spec:
+  selector:
+    app.kubernetes.io/name: news-rag-postgres
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: news-rag-postgres
+  namespace: news-rag
+  labels:
+    app.kubernetes.io/name: news-rag-postgres
+spec:
+  serviceName: news-rag-postgres
+  replicas: 1
+  # Explicit defaults the apiserver would set anyway — keeps Argo SSA from
+  # flagging drift on every reconcile (same as the mem0 StatefulSet).
+  podManagementPolicy: OrderedReady
+  revisionHistoryLimit: 10
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: news-rag-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: news-rag-postgres
+    spec:
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgres
+          image: ankane/pgvector:v0.5.1
+          imagePullPolicy: IfNotPresent
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          ports:
+            - name: pg
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: news-rag-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 1
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: init
+          configMap:
+            name: news-rag-postgres-init
+            defaultMode: 420
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 10Gi

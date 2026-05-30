@@ -1,0 +1,60 @@
+---
+# Bootstrap SQL run once by the ankane/pgvector image on first start (any
+# *.sql or *.sh under /docker-entrypoint-initdb.d/ is executed). pgvector
+# ships the extension binaries; we still `CREATE EXTENSION` per database.
+# The schema is idempotent (IF NOT EXISTS) so re-running on an existing PVC
+# is a no-op.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: news-rag-postgres-init
+  namespace: news-rag
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- One row per article. summary lives here as plain text alongside metadata
+    -- so the "give me a briefing" use case never has to touch the vector index.
+    CREATE TABLE IF NOT EXISTS articles (
+      id                TEXT PRIMARY KEY,
+      feed_id           TEXT NOT NULL,
+      feed_title        TEXT,
+      category          TEXT,
+      title             TEXT,
+      author            TEXT,
+      url               TEXT NOT NULL,
+      published_at      TIMESTAMPTZ NOT NULL,
+      ingested_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+      body_text         TEXT,
+      body_source       TEXT NOT NULL,
+      extraction_status TEXT NOT NULL,
+      summary           TEXT,
+      content_hash      TEXT NOT NULL,
+      read              BOOLEAN NOT NULL DEFAULT false,
+      starred           BOOLEAN NOT NULL DEFAULT false,
+      state_synced_at   TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS articles_published_idx ON articles (published_at DESC);
+    CREATE INDEX IF NOT EXISTS articles_feed_idx      ON articles (feed_id, published_at DESC);
+    CREATE INDEX IF NOT EXISTS articles_category_idx  ON articles (category, published_at DESC);
+
+    -- One row per chunk. embedding is the bge-m3 vector (1024 dims).
+    CREATE TABLE IF NOT EXISTS article_chunks (
+      id          BIGSERIAL PRIMARY KEY,
+      article_id  TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      chunk_index INT NOT NULL,
+      text        TEXT NOT NULL,
+      embedding   vector(1024) NOT NULL,
+      UNIQUE (article_id, chunk_index)
+    );
+    CREATE INDEX IF NOT EXISTS article_chunks_hnsw ON article_chunks
+      USING hnsw (embedding vector_cosine_ops);
+
+    -- Single-row table tracking the incremental-ingest high-water mark.
+    CREATE TABLE IF NOT EXISTS ingest_state (
+      id                         INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      last_successful_run_at     TIMESTAMPTZ,
+      last_article_published_at  TIMESTAMPTZ,
+      backfill_completed         BOOLEAN NOT NULL DEFAULT false
+    );
+    INSERT INTO ingest_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
