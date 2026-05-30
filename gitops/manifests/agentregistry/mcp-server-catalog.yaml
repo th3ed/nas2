@@ -42,5 +42,17 @@ data:
             "url": "http://mem0-mcp.mem0:8080/mcp/"
           }
         ]
+      },
+      {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+        "name": "news-rag.news-rag-mcp/articles",
+        "description": "RAG over RSS articles ingested from FreshRSS into pgvector. Tools: search_articles (semantic), get_briefing (SQL daily digest), get_article, list_recent, list_feeds, mark_read, star.",
+        "version": "1.0.0",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "http://news-rag-mcp.news-rag:8080/mcp/"
+          }
+        ]
       }
     ]
