@@ -79,7 +79,13 @@ spec:
                   # column is sized accordingly.
                   value: text-embedding-3-small
                 - name: MODEL_SUMMARY
-                  value: "gemma4:e4b"
+                  # Was gemma4:e4b — it emits reasoning_content (CoT)
+                  # which inflates output length and frequently leaves
+                  # message.content empty even at max_tokens=2000.
+                  # qwen3:4b-instruct-2507-q8_0 is non-reasoning,
+                  # already-loaded, and produces clean 2-3 sentence
+                  # summaries reliably. See CLAUDE.md gotchas.
+                  value: "qwen3:4b-instruct-2507-q8_0"
                 - name: BACKFILL_DAYS
                   value: "14"
                 - name: FETCH_BATCH
