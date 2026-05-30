@@ -1,0 +1,40 @@
+---
+# One-shot Job that asks the in-cluster Ollama to pull bge-m3 (1024-dim).
+# news-rag's ingest CronJob hits this model via LiteLLM's `bge-m3` alias.
+#
+# Argo runs this on every sync because of the Sync hook;
+# hook-delete-policy clears the previous Job so re-runs aren't blocked by
+# Job immutability. Ollama's /api/pull is idempotent — re-pulling an
+# already-present model returns immediately.
+#
+# sync-wave 14 = before the wave-20 ingest CronJob first fires (the model
+# must be present in Ollama before any embedding call would succeed).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: news-rag-ollama-pull-embed
+  namespace: news-rag
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "14"
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: pull
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "INFO: requesting ollama pull bge-m3"
+              curl -N --fail-with-body \
+                -X POST http://ollama.ollama:11434/api/pull \
+                -H 'Content-Type: application/json' \
+                -d '{"name":"bge-m3","stream":false}'
+              echo
+              echo "INFO: pull complete"
