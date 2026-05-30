@@ -20,14 +20,4 @@ metadata:
   namespace: agentregistry
 data:
   skills.json: |
-    [
-      {
-        "name": "freshrss",
-        "description": "Manage RSS feeds and articles via a self-hosted FreshRSS instance. Read articles, get summaries, check unread counts, mark read/starred, add or remove feed subscriptions.",
-        "version": "1.0.0",
-        "repository": {
-          "source": "github",
-          "url": "https://github.com/th3ed/nas2.git"
-        }
-      }
-    ]
+    []
