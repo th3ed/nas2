@@ -3,7 +3,7 @@
 The nas2 news-rag stack ingests articles from your FreshRSS instance into pgvector
 on a 30-minute schedule, generates per-article summaries via local LLM, and exposes
 search + briefing + read tools over MCP. It's reachable on the tailnet at
-`https://news-rag-mcp.taile9c9c.ts.net/mcp/` — any MCP-speaking client can connect.
+`https://news-rag-mcp.taile9c9c.ts.net/mcp` — any MCP-speaking client can connect.
 
 Tailnet membership is the auth boundary (same model as
 `argocd.taile9c9c.ts.net`, `openclaw.taile9c9c.ts.net`). No API key needed
