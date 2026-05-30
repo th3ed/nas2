@@ -198,6 +198,13 @@ data:
         tools:
           resources: false
           prompts: false
+      news_rag:
+        url: http://news-rag-mcp.news-rag:8080/mcp/
+        timeout: 60
+        connect_timeout: 30
+        tools:
+          resources: false
+          prompts: false
 
     # Telegram is configured entirely via env vars (TELEGRAM_BOT_TOKEN,
     # TELEGRAM_ALLOWED_USERS, optionally TELEGRAM_HOME_CHANNEL) which Hermes
