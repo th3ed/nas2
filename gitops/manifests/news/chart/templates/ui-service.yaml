@@ -1,0 +1,16 @@
+{{- if .Values.ui.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-ui
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "ui" "ctx" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "news.selectorLabels" (dict "component" "ui" "ctx" .) | nindent 4 }}
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+{{- end }}

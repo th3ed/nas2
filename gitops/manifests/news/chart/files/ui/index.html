@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}news — dashboard{% endblock %}
+{% block content %}
+  <h1>news — ops dashboard</h1>
+  <div class="stats">
+    <div class="stat"><div class="label">Articles</div><div class="value">{{ article_stats.total }}</div></div>
+    <div class="stat"><div class="label">With summary</div><div class="value">{{ article_stats.summarized }}</div></div>
+    <div class="stat"><div class="label">Chunks</div><div class="value">{{ chunk_stats.chunks }}</div></div>
+    <div class="stat"><div class="label">Multi-cite chunks</div><div class="value">{{ chunk_stats.multi_cite }}</div></div>
+  </div>
+  <h2>ingest state</h2>
+  <table>
+    <tr><th>Last successful run</th><td>{{ ingest_state.last_successful_run_at | isoshort }}</td></tr>
+    <tr><th>Last article published</th><td>{{ ingest_state.last_article_published_at | isoshort }}</td></tr>
+    <tr><th>Backfill complete</th><td>{{ ingest_state.backfill_completed }}</td></tr>
+  </table>
+  {% if force_resync_enabled %}
+    <form method="post" action="/api/ingest/run" style="margin-top:12px">
+      <button type="submit">Run ingest now</button>
+    </form>
+  {% endif %}
+  <h2>recent ingest runs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Started</th><th>Status</th><th>Fetched</th><th>Inserted</th>
+        <th>Chunks new</th><th>Chunks dedup</th><th>Trigger</th><th>Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td>{{ r.started_at | isoshort }}</td>
+        <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+        <td>{{ r.items_fetched }}</td>
+        <td>{{ r.items_inserted }}</td>
+        <td>{{ r.chunks_inserted }}</td>
+        <td>{{ r.chunks_dedup }}</td>
+        <td class="muted">{{ r.trigger }}</td>
+        <td class="muted">
+          {% if r.finished_at and r.started_at %}
+            {{ ((r.finished_at - r.started_at).total_seconds() | round(1)) }}s
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

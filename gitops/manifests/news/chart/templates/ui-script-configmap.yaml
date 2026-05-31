@@ -1,0 +1,23 @@
+{{- if .Values.ui.enabled }}
+# Source files for the FastAPI UI live under chart/files/ui/ so Helm does
+# not try to parse their Jinja brace expressions as Go template actions.
+# We load each as a raw string here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: news-ui-script
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "ui" "ctx" .) | nindent 4 }}
+data:
+  app.py: |
+{{ .Files.Get "files/ui/app.py" | indent 4 }}
+  base.html: |
+{{ .Files.Get "files/ui/base.html" | indent 4 }}
+  index.html: |
+{{ .Files.Get "files/ui/index.html" | indent 4 }}
+  articles.html: |
+{{ .Files.Get "files/ui/articles.html" | indent 4 }}
+  article.html: |
+{{ .Files.Get "files/ui/article.html" | indent 4 }}
+{{- end }}

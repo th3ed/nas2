@@ -1,0 +1,23 @@
+{{- if .Values.ui.enabled }}
+# news-ui exposed on the tailnet at https://<ui.hostname>/. Tailnet membership
+# is the auth boundary; same model as the MCP sister Ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: news-ui
+  namespace: {{ .Values.namespace.name }}
+  annotations:
+    tailscale.com/http-redirect: "true"
+  labels:
+    {{- include "news.componentLabels" (dict "component" "ui" "ctx" .) | nindent 4 }}
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: news-ui
+      port:
+        number: 8081
+  tls:
+    - hosts:
+        - {{ .Values.ui.hostname | trimSuffix (printf ".%s" .Values.tailnetDomain) }}
+{{- end }}

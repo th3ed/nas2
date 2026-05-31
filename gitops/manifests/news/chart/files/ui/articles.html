@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}news — articles{% endblock %}
+{% block content %}
+  <h1>articles ({{ total }})</h1>
+  <form class="filterbar" method="get" action="/articles">
+    <input type="text" name="q" value="{{ q }}" placeholder="search title or summary" size="40">
+    <input type="text" name="feed" value="{{ feed }}" placeholder="feed substring">
+    <label class="muted"><input type="checkbox" name="only_unread" value="true" {% if only_unread %}checked{% endif %}> unread only</label>
+    <button type="submit">Filter</button>
+  </form>
+  <table>
+    <thead>
+      <tr><th>Published</th><th>Title</th><th>Feed</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for a in articles %}
+      <tr>
+        <td class="muted">{{ a.published_at | isoshort }}</td>
+        <td><a class="article" href="/articles/{{ a.id }}">{{ a.title or "(untitled)" }}</a></td>
+        <td class="muted">{{ a.feed_title }}</td>
+        <td class="muted">
+          {% if a.read %}<span class="pill ok">read</span>{% endif %}
+          {% if a.starred %}<span class="pill running">★</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="pagination">
+    {% if page > 1 %}<a href="?q={{ q }}&feed={{ feed }}&only_unread={{ only_unread }}&page={{ page-1 }}">‹ prev</a>{% endif %}
+    <span class="muted">page {{ page }} / {{ pages }}</span>
+    {% if page < pages %}<a href="?q={{ q }}&feed={{ feed }}&only_unread={{ only_unread }}&page={{ page+1 }}">next ›</a>{% endif %}
+  </div>
+{% endblock %}

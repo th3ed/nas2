@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title or "article" }}{% endblock %}
+{% block content %}
+  <h1>{{ article.title }}</h1>
+  <p class="muted">
+    {{ article.published_at | isoshort }} · {{ article.feed_title }}
+    {% if article.category %}· {{ article.category }}{% endif %}
+    · <a href="{{ article.url }}">source ↗</a>
+    · status: {{ article.extraction_status }} ({{ article.body_source }})
+  </p>
+  {% if article.summary %}
+    <h2>summary</h2>
+    <pre class="body">{{ article.summary }}</pre>
+  {% endif %}
+  <h2>body</h2>
+  <pre class="body">{{ article.body_text or "(no body)" }}</pre>
+  <h2>chunks ({{ chunks|length }})</h2>
+  <table>
+    <thead><tr><th>id</th><th>citation_ct</th><th>preview</th></tr></thead>
+    <tbody>
+    {% for c in chunks %}
+      <tr>
+        <td class="muted">#{{ c.id }}</td>
+        <td>{% if c.citation_ct > 1 %}<span class="pill ok">×{{ c.citation_ct }}</span>{% else %}1{% endif %}</td>
+        <td class="muted">{{ c.text[:140] }}…</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

@@ -1,0 +1,107 @@
+{{- if .Values.ui.enabled }}
+# news-ui — FastAPI dashboard + article browser. Sister Deployment to
+# news-mcp on a different hostname; one or the other can be disabled
+# independently. python:3.12-slim + initContainer pip-install + ConfigMap-
+# mounted script (mem0 library-mode pattern).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-ui
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "ui" "ctx" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "news.selectorLabels" (dict "component" "ui" "ctx" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "news.componentLabels" (dict "component" "ui" "ctx" .) | nindent 8 }}
+    spec:
+      serviceAccountName: news-ui
+      {{- include "news.nodeSelector" . | nindent 6 }}
+      initContainers:
+        - name: pip-install
+          image: {{ .Values.runtime.pythonImage }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              pip install --no-cache-dir --target /pkg {{ include "news.pipArgs" .Values.runtime.pipPins.ui }}
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+      containers:
+        - name: ui
+          image: {{ .Values.runtime.pythonImage }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - "python"
+            - "-m"
+            - "uvicorn"
+            - "app:app"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8081"
+            - "--app-dir"
+            - "/app"
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: PYTHONPATH
+              value: /pkg
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PG_HOST
+              value: postgres.{{ .Values.namespace.name }}
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DB
+              value: postgres
+            - name: PG_USER
+              value: postgres
+            - name: NEWS_NAMESPACE
+              value: {{ .Values.namespace.name | quote }}
+            - name: INGEST_CRONJOB
+              value: news-ingest
+            - name: FORCE_RESYNC_ENABLED
+              value: {{ .Values.ui.forceResyncEnabled | quote }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.secretName }}
+                optional: false
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+              readOnly: true
+            - name: script
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.ui.resources | nindent 12 }}
+      volumes:
+        - name: pkg
+          emptyDir: {}
+        - name: script
+          configMap:
+            name: news-ui-script
+{{- end }}

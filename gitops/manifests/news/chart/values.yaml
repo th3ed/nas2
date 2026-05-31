@@ -81,10 +81,12 @@ mcp:
     requests: {cpu: 50m, memory: 128Mi}
     limits: {memory: 512Mi}
 
-# Web UI is gated until PR 6 implements it. Keep disabled in PR 1.
 ui:
-  enabled: false
+  enabled: true
   hostname: news.taile9c9c.ts.net
+  # When true, the dashboard exposes a "Run ingest now" button that creates
+  # a one-shot Job from news-ingest. Backed by a Role granting jobs.create
+  # in the news namespace. Set false to ship a read-only dashboard.
   forceResyncEnabled: true
   resources:
     requests: {cpu: 50m, memory: 128Mi}
