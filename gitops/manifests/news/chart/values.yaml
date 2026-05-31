@@ -84,7 +84,11 @@ mcp:
 
 ui:
   enabled: true
-  hostname: news.taile9c9c.ts.net
+  # Use news-ui-prefixed hostname to match the news-mcp sister Ingress.
+  # The shorter `news.taile9c9c.ts.net` triggers a `SetDNS 500: failed to
+  # create DNS record` from the Tailscale coordination server (likely a
+  # tailnet-wide hostname collision on the short name).
+  hostname: news-ui.taile9c9c.ts.net
   # When true, the dashboard exposes a "Run ingest now" button that creates
   # a one-shot Job from news-ingest. Backed by a Role granting jobs.create
   # in the news namespace. Set false to ship a read-only dashboard.
