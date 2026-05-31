@@ -1,19 +1,24 @@
-# news-rag MCP server
+# news MCP server
 
-The nas2 news-rag stack ingests articles from your FreshRSS instance into pgvector
-on a 30-minute schedule, generates per-article summaries via local LLM, and exposes
-search + briefing + read tools over MCP. It's reachable on the tailnet at
-`https://news-rag-mcp.taile9c9c.ts.net/mcp` — any MCP-speaking client can connect.
+The nas2 `news` stack ingests articles from your FreshRSS instance into pgvector
+on a 30-minute schedule, generates per-article summaries via a local LLM, and
+exposes search + briefing + read tools over MCP. It's reachable on the tailnet at
+`https://news-mcp.taile9c9c.ts.net/mcp` — any MCP-speaking client can connect.
 
 Tailnet membership is the auth boundary (same model as
 `argocd.taile9c9c.ts.net`, `openclaw.taile9c9c.ts.net`). No API key needed
 beyond being on the tailnet.
 
+> **Renamed from `news-rag` (PR 1 of the refactor, 2026-05-31).** Tool prefix
+> changed from `mcp__news-rag__*` to `mcp__news__*`. Any client still pointing
+> at `https://news-rag-mcp.taile9c9c.ts.net/mcp` will keep working until PR 2
+> tears down the old Application, but new clients should use the URL above.
+
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `search_articles(query, top_k=10, since, until, source, category, only_unread)` | Semantic search across chunks (bge-m3 embeddings + HNSW). Filters apply BEFORE the vector search. Returns best chunk per article. |
+| `search_articles(query, top_k=10, since, until, source, category, only_unread)` | Semantic search across chunks (nomic-embed-text 768-dim + HNSW). Filters apply BEFORE the vector search. Returns best chunk per article. |
 | `get_briefing(since="24h", source, category, only_unread, limit=20)` | SQL-only newest-first feed of precomputed summaries. The fast path for "what's new today." |
 | `get_article(id)` | Full body + metadata for one article. |
 | `list_recent(feed, category, only_unread, limit=20)` | Metadata-only listing, lighter than briefing. |
@@ -29,7 +34,7 @@ relative strings (`24h`, `7d`, `2w`, `3m`). All filters compose with AND.
 Add the server with the `claude` CLI:
 
 ```bash
-claude mcp add news-rag --transport http https://news-rag-mcp.taile9c9c.ts.net/mcp
+claude mcp add news --transport http https://news-mcp.taile9c9c.ts.net/mcp
 ```
 
 Or, equivalently, edit your project's `.mcp.json` (or `~/.claude.json` for a
@@ -38,9 +43,9 @@ user-scope entry):
 ```json
 {
   "mcpServers": {
-    "news-rag": {
+    "news": {
       "type": "http",
-      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp"
+      "url": "https://news-mcp.taile9c9c.ts.net/mcp"
     }
   }
 }
@@ -59,9 +64,9 @@ existing `provider` block from [docs/opencode-litellm.md](opencode-litellm.md)):
   "$schema": "https://opencode.ai/config.json",
   // ...existing provider block...
   "mcp": {
-    "news-rag": {
+    "news": {
       "type": "remote",
-      "url": "https://news-rag-mcp.taile9c9c.ts.net/mcp",
+      "url": "https://news-mcp.taile9c9c.ts.net/mcp",
       "enabled": true
     }
   }
@@ -89,14 +94,14 @@ From a tailnet-connected laptop:
 # Server is up if this returns 405 with allow: GET, POST, DELETE.
 # (The bare GET is what proves the bind/route; an MCP handshake needs
 # a POST initialize.)
-curl -sI https://news-rag-mcp.taile9c9c.ts.net/mcp
+curl -sI https://news-mcp.taile9c9c.ts.net/mcp
 
 # Manual MCP initialize (proves the full handshake works):
 curl -sN -X POST \
   -H 'Content-Type: application/json' \
   -H 'Accept: text/event-stream, application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' \
-  https://news-rag-mcp.taile9c9c.ts.net/mcp
+  https://news-mcp.taile9c9c.ts.net/mcp
 ```
 
 ## Notes
@@ -115,5 +120,10 @@ curl -sN -X POST \
   `get_briefing`. Articles where the original URL was paywalled or
   Cloudflare-blocked land with `extraction_status` of `too_short` or
   `fetch_failed` and are excluded.
-- The MCP server is also auto-registered in the in-cluster AgentRegistry and
-  consumed by Hermes — no extra wiring needed for the in-cluster agent.
+- Chunks are de-duplicated by content (near-duplicate cosine collapse lands
+  in PR 3); the `chunks` table is shared across articles via
+  `chunk_articles`, so a single chunk can be cited by multiple syndicated
+  reprints without bloating the vector store.
+- The MCP server is auto-registered in the in-cluster AgentRegistry as
+  `news.news-mcp/articles` and consumed by Hermes — no extra wiring needed
+  for the in-cluster agent.
