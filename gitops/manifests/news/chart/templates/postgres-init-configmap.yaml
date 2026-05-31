@@ -62,52 +62,6 @@ data:
     );
     CREATE INDEX IF NOT EXISTS chunk_articles_article_idx ON chunk_articles (article_id);
 
-    -- Named entities extracted by NER at ingest time. Used for the on-demand
-    -- wiki tools and entity-aware briefing groupings. Embedding is of the
-    -- canonical name (not the citing chunk) — used to fuzzy-match new
-    -- mentions against existing entities.
-    CREATE TABLE IF NOT EXISTS entities (
-      id             BIGSERIAL PRIMARY KEY,
-      canonical_name TEXT NOT NULL,
-      kind           TEXT NOT NULL,
-      embedding      vector({{ .Values.litellm.embedDim }}) NOT NULL,
-      citation_ct    INT NOT NULL DEFAULT 0,
-      first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_cited_at  TIMESTAMPTZ
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS entities_canonical_kind ON entities (canonical_name, kind);
-    CREATE INDEX IF NOT EXISTS entities_hnsw ON entities
-      USING hnsw (embedding vector_cosine_ops);
-
-    -- Alternate names for an entity (e.g. "NVIDIA Corp" → "NVIDIA").
-    CREATE TABLE IF NOT EXISTS entity_aliases (
-      entity_id BIGINT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-      alias     TEXT   NOT NULL,
-      PRIMARY KEY (entity_id, alias)
-    );
-    CREATE INDEX IF NOT EXISTS entity_aliases_alias_idx ON entity_aliases (alias);
-
-    -- Each mention links an entity, the citing article, and the specific
-    -- chunk that mentioned it (so we can show the exact passage).
-    CREATE TABLE IF NOT EXISTS entity_mentions (
-      entity_id  BIGINT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-      article_id TEXT   NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
-      chunk_id   BIGINT REFERENCES chunks(id) ON DELETE SET NULL,
-      PRIMARY KEY (entity_id, article_id, chunk_id)
-    );
-    CREATE INDEX IF NOT EXISTS entity_mentions_article_idx ON entity_mentions (article_id);
-
-    -- On-demand wiki pages. is_dirty is flipped TRUE when a new mention
-    -- lands; the MCP get_wiki tool regens the body on next read (with a
-    -- short debounce floor to prevent thrash on hot entities).
-    CREATE TABLE IF NOT EXISTS wiki_pages (
-      entity_id          BIGINT PRIMARY KEY REFERENCES entities(id) ON DELETE CASCADE,
-      body               TEXT NOT NULL,
-      generated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-      citation_ct_at_gen INT NOT NULL,
-      is_dirty           BOOLEAN NOT NULL DEFAULT FALSE
-    );
-
     -- Single-row high-water table for incremental ingest.
     CREATE TABLE IF NOT EXISTS ingest_state (
       id                        INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),

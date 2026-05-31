@@ -1,6 +1,6 @@
 apiVersion: v2
 name: news
-description: News RAG service — FreshRSS ingest, pgvector storage, FastMCP server, on-demand entity wiki, web UI
+description: News RAG service — FreshRSS ingest, pgvector storage, FastMCP server, web UI
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

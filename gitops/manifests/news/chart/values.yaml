@@ -54,7 +54,6 @@ litellm:
   embedModel: text-embedding-3-small
   embedDim: 768
   summarizeModel: qwen3:4b-instruct-2507-q8_0
-  nerModel: qwen3:4b-instruct-2507-q8_0
 
 ingest:
   enabled: true
@@ -65,16 +64,9 @@ ingest:
   chunkOverlap: 200
   embedConcurrency: 64
   summarizeConcurrency: 8
-  nerConcurrency: 8
 
 dedup:
   cosineThreshold: 0.95
-
-# Wiki tools (get_wiki, search_entities) and the NER stage that powers them are
-# gated until PR 5 lands. Keep disabled in PR 1 to preserve current MCP behavior.
-wiki:
-  enabled: false
-  regenDebounce: "10m"
 
 mcp:
   enabled: true

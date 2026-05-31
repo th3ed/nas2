@@ -31,7 +31,7 @@ pass "$TITLE"
 
 TITLE="news: new-schema tables present"
 tables=$(ssh_kubectl "-n news exec postgres-0 -- psql -U postgres -tAc \"SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;\"")
-for t in articles chunks chunk_articles entities entity_aliases entity_mentions wiki_pages ingest_state ingest_runs; do
+for t in articles chunks chunk_articles ingest_state ingest_runs; do
     if ! printf '%s\n' "$tables" | grep -qx "$t"; then
         fail "$TITLE: missing table '$t'. Got: $tables"
         exit 1
