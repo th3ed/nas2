@@ -120,10 +120,31 @@ curl -sN -X POST \
   `get_briefing`. Articles where the original URL was paywalled or
   Cloudflare-blocked land with `extraction_status` of `too_short` or
   `fetch_failed` and are excluded.
-- Chunks are de-duplicated by content (near-duplicate cosine collapse lands
-  in PR 3); the `chunks` table is shared across articles via
-  `chunk_articles`, so a single chunk can be cited by multiple syndicated
-  reprints without bloating the vector store.
+- Chunks are de-duplicated by content (near-duplicate cosine collapse,
+  threshold 0.95 sim by default); the `chunks` table is shared across
+  articles via `chunk_articles`, so a single chunk can be cited by multiple
+  syndicated reprints without bloating the vector store.
 - The MCP server is auto-registered in the in-cluster AgentRegistry as
   `news.news-mcp/articles` and consumed by Hermes — no extra wiring needed
   for the in-cluster agent.
+- `search_articles` and `get_briefing` return a `{query_window, as_of,
+  is_historical, results}` envelope. When `is_historical=true`, the
+  client/LLM should reference articles by their `published_at` dates and
+  avoid framing results as "today" or "recent" — the data is from the
+  queried window, not the present.
+
+## Web UI
+
+A separate FastAPI + Jinja dashboard runs alongside the MCP server at
+`https://news.taile9c9c.ts.net/`. Three views:
+
+- `/` — ops dashboard: article + chunk + multi-cite counts, ingest_state
+  high-water values, last 20 ingest runs with per-stage timings, and a
+  "Run ingest now" button (gated by `ui.forceResyncEnabled`).
+- `/articles` — paginated browser with title/summary search, feed filter,
+  unread-only toggle.
+- `/articles/<id>` — full body + summary + per-chunk citation counts.
+
+Same tailnet-membership auth model as the MCP endpoint. The "Run ingest
+now" button uses a namespace-scoped Role (`jobs.create` + `cronjobs.get`)
+to launch a one-shot Job from the `news-ingest` CronJob template.
