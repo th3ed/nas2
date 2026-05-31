@@ -34,6 +34,14 @@ spec:
           # for the FreshRSS private domain from desktop pods.
           nodeSelector:
             kubernetes.io/hostname: nas2
+          # LAN DNS (192.168.111.3) is intermittently unavailable, causing
+          # transient EAI_NONAME failures for the private andrews.casa zone.
+          # Pin the FreshRSS hostname to its static LAN IP via /etc/hosts so
+          # the ingest pod never depends on LAN DNS being up.
+          hostAliases:
+            - ip: "192.168.111.10"
+              hostnames:
+                - "freshrss.andrews.casa"
           initContainers:
             - name: pip-install
               image: python:3.12-slim
