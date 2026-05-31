@@ -1,0 +1,61 @@
+{{- if .Values.registryCleanup.enabled }}
+# One-shot DELETE of the pre-rename AgentRegistry server entry. The chart's
+# agentregistry mcp-server-catalog now ships the new news.news-mcp/articles
+# entry, but the registry-sync hook is idempotent on add+update only — it
+# never removes old entries. Without this Job, both names would stay
+# registered indefinitely and Hermes / external MCP clients would see two
+# duplicate servers until manual cleanup.
+#
+# URL-encoded slash per the AgentRegistry MCP Registry schema (see
+# CLAUDE.md). 404 from the registry is treated as success (already gone).
+#
+# Disable (registryCleanup.enabled=false) after first successful sync.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: registry-cleanup
+  namespace: {{ .Values.namespace.name }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+  labels:
+    {{- include "news.componentLabels" (dict "component" "registry-cleanup" "ctx" .) | nindent 4 }}
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "news.componentLabels" (dict "component" "registry-cleanup" "ctx" .) | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- include "news.nodeSelector" . | nindent 6 }}
+      containers:
+        - name: cleanup
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              # %2F is the URL-encoded slash in the server name segment.
+              ENCODED_NAME=$(printf '%s' '{{ .Values.registryCleanup.oldServerName }}' | sed 's|/|%2F|g')
+              URL="{{ .Values.registryCleanup.registryUrl }}/v0/servers/${ENCODED_NAME}/versions/{{ .Values.registryCleanup.oldServerVersion }}"
+              echo "INFO: DELETE $URL"
+              status=$(curl -s -o /tmp/body -w '%{http_code}' -X DELETE "$URL")
+              echo "INFO: registry responded with $status"
+              cat /tmp/body 2>/dev/null || true
+              echo
+              case "$status" in
+                200|204|404)
+                  echo "INFO: cleanup ok (treating 404 as already-gone)"
+                  exit 0
+                  ;;
+                *)
+                  echo "ERROR: unexpected status $status" >&2
+                  exit 1
+                  ;;
+              esac
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+{{- end }}

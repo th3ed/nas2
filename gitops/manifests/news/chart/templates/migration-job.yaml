@@ -1,0 +1,154 @@
+{{- if .Values.migration.enabled }}
+# One-shot data migration from the pre-rename news-rag namespace into the new
+# news namespace. Argo PostSync hook so the new postgres has finished its
+# initdb pass before this fires (PreSync would deadlock — the new DB
+# wouldn't exist yet). Idempotent via a row-count guard, so a retry after
+# the new postgres restarts is safe.
+#
+# Disable this Job (migration.enabled=false) after the migration is
+# verified and the old news-rag namespace is removed (PR 2).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-migration-script
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "migration" "ctx" .) | nindent 4 }}
+data:
+  migrate.sh: |
+    #!/bin/sh
+    set -euo pipefail
+
+    OLD_HOST="news-rag-postgres.{{ .Values.migration.sourceNamespace }}.svc.cluster.local"
+    NEW_HOST="postgres.{{ .Values.namespace.name }}.svc.cluster.local"
+    # POSTGRES_PASSWORD is the same value on both DBs (same Bitwarden secret).
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+
+    wait_for() {
+      host="$1"
+      label="$2"
+      max_attempts="${3:-60}"
+      echo "INFO: waiting for $label postgres at $host..."
+      i=0
+      while ! pg_isready -h "$host" -U postgres -d postgres -t 2 -q; do
+        i=$((i + 1))
+        if [ "$i" -gt "$max_attempts" ]; then
+          echo "ERROR: $label postgres at $host did not become ready" >&2
+          exit 1
+        fi
+        sleep 2
+      done
+      echo "INFO: $label postgres ready"
+    }
+
+    wait_for "$OLD_HOST" "old" 30
+    wait_for "$NEW_HOST" "new" 90
+
+    # Idempotency guard. If the new DB already has articles, assume a prior
+    # migration succeeded and exit cleanly so the PostSync hook is green.
+    NEW_ARTICLE_COUNT=$(psql -h "$NEW_HOST" -U postgres -d postgres -tA \
+      -c "SELECT COUNT(*) FROM articles")
+    if [ "$NEW_ARTICLE_COUNT" != "0" ]; then
+      echo "INFO: new DB already has $NEW_ARTICLE_COUNT articles; skipping migration"
+      exit 0
+    fi
+
+    # Phase 1: articles (schema is identical in old and new)
+    echo "INFO: copying articles..."
+    pg_dump -h "$OLD_HOST" -U postgres -d postgres \
+      --data-only --table=public.articles --no-owner --no-comments \
+      | psql -h "$NEW_HOST" -U postgres -d postgres \
+        --single-transaction --set ON_ERROR_STOP=1
+    ART_COUNT=$(psql -h "$NEW_HOST" -U postgres -d postgres -tA \
+      -c "SELECT COUNT(*) FROM articles")
+    echo "INFO: copied $ART_COUNT articles"
+
+    # Phase 2: ingest_state — TRUNCATE the default singleton row first so
+    # the dumped row's PK doesn't conflict with the seed INSERT.
+    echo "INFO: copying ingest_state..."
+    psql -h "$NEW_HOST" -U postgres -d postgres -c "TRUNCATE ingest_state"
+    pg_dump -h "$OLD_HOST" -U postgres -d postgres \
+      --data-only --table=public.ingest_state --no-owner --no-comments \
+      | psql -h "$NEW_HOST" -U postgres -d postgres \
+        --single-transaction --set ON_ERROR_STOP=1
+
+    # Phase 3: article_chunks -> chunks + chunk_articles. We preserve the
+    # old chunks.id sequence so any external reference (e.g. a UI URL the
+    # user has open) keeps pointing at the same row. citation_ct defaults
+    # to 1 — no dedup is applied to migrated data; the new dedup pathway
+    # only fires on freshly ingested chunks.
+    echo "INFO: migrating article_chunks -> chunks + chunk_articles..."
+    psql -h "$OLD_HOST" -U postgres -d postgres -c \
+      "\copy (SELECT id, article_id, chunk_index, text, embedding FROM article_chunks ORDER BY id) TO '/tmp/old_chunks.csv' WITH CSV"
+
+    psql -h "$NEW_HOST" -U postgres -d postgres --set ON_ERROR_STOP=1 <<SQL
+    CREATE TEMP TABLE _t (
+      old_id     BIGINT,
+      article_id TEXT,
+      chunk_index INT,
+      text       TEXT,
+      embedding  vector({{ .Values.litellm.embedDim }})
+    );
+    \copy _t FROM '/tmp/old_chunks.csv' WITH CSV
+    INSERT INTO chunks (id, text, embedding, citation_ct)
+      SELECT old_id, text, embedding, 1 FROM _t
+      ON CONFLICT (id) DO NOTHING;
+    INSERT INTO chunk_articles (chunk_id, article_id, position)
+      SELECT old_id, article_id, chunk_index FROM _t
+      ON CONFLICT DO NOTHING;
+    SELECT setval('chunks_id_seq', COALESCE((SELECT MAX(id) FROM chunks), 0) + 1);
+    SQL
+
+    CHUNK_COUNT=$(psql -h "$NEW_HOST" -U postgres -d postgres -tA \
+      -c "SELECT COUNT(*) FROM chunks")
+    LINK_COUNT=$(psql -h "$NEW_HOST" -U postgres -d postgres -tA \
+      -c "SELECT COUNT(*) FROM chunk_articles")
+    echo "INFO: migration complete: $ART_COUNT articles, $CHUNK_COUNT chunks, $LINK_COUNT chunk-article links"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-migration
+  namespace: {{ .Values.namespace.name }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+  labels:
+    {{- include "news.componentLabels" (dict "component" "migration" "ctx" .) | nindent 4 }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "news.componentLabels" (dict "component" "migration" "ctx" .) | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- include "news.nodeSelector" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ .Values.postgres.image }}
+          command: ["sh", "/scripts/migrate.sh"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.secretName }}
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 512Mi}
+      volumes:
+        - name: scripts
+          configMap:
+            name: data-migration-script
+            defaultMode: 0755
+        - name: tmp
+          emptyDir: {}
+{{- end }}

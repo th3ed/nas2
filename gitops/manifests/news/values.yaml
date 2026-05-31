@@ -1,0 +1,5 @@
+# Cluster-specific overlay for the news chart. Argo points its $values source here.
+# See chart/values.yaml for the full schema; this file only sets the in-cluster overrides.
+
+# (No overrides yet — the chart defaults already match the nas2 cluster.
+# Add overrides here when this chart is deployed to a different cluster.)

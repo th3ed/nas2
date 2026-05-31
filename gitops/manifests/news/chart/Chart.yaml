@@ -1,0 +1,12 @@
+apiVersion: v2
+name: news
+description: News RAG service — FreshRSS ingest, pgvector storage, FastMCP server, on-demand entity wiki, web UI
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+maintainers:
+  - name: th3ed
+    url: https://github.com/th3ed
+sources:
+  - https://github.com/th3ed/nas2

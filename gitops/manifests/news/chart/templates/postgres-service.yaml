@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "postgres" "ctx" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "news.selectorLabels" (dict "component" "postgres" "ctx" .) | nindent 4 }}
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+  clusterIP: None
