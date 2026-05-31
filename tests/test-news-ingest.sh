@@ -19,11 +19,13 @@ fi
 pass "$TITLE"
 
 TITLE="news: most-recent ingest Job succeeded (or none yet)"
-ingest_jobs=$(ssh_kubectl "-n news get jobs --no-headers 2>/dev/null" | awk '$1 ~ /^news-ingest/' || true)
-if [[ -z "$ingest_jobs" ]]; then
+# Sort by creationTimestamp so a stale Failed Job from earlier (showing AGE=8h)
+# doesn't outrank the recent Complete jobs. `sort -k4` on get-jobs output would
+# sort by the DURATION column ("8h" > "2m"), picking the wrong row.
+latest=$(ssh_kubectl "-n news get jobs -l job-name --sort-by=.metadata.creationTimestamp -o jsonpath='{range .items[*]}{.metadata.name}{\"\n\"}{end}'" | awk '/^news-ingest-/' | tail -1)
+if [[ -z "$latest" ]]; then
     pass "$TITLE: no Jobs yet (cron not fired)"
 else
-    latest=$(printf '%s\n' "$ingest_jobs" | sort -k4 | tail -1 | awk '{print $1}')
     completions=$(ssh_kubectl "-n news get job $latest -o jsonpath={.status.succeeded}")
     failed=$(ssh_kubectl "-n news get job $latest -o jsonpath={.status.failed}")
     if [[ "$completions" == "1" ]]; then
