@@ -32,7 +32,7 @@ spec:
           args:
             - |
               set -eu
-              pip install --no-cache-dir --target /pkg {{ .Values.runtime.pipPins.mcp }}
+              pip install --no-cache-dir --target /pkg {{ include "news.pipArgs" .Values.runtime.pipPins.mcp }}
           volumeMounts:
             - name: pkg
               mountPath: /pkg

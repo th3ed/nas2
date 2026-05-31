@@ -19,13 +19,28 @@ tailnetDomain: taile9c9c.ts.net
 # the chart does not ship custom images).
 runtime:
   pythonImage: python:3.12-slim
-  # Single-line pip arg lists — the chart pip-installs to /pkg in an
-  # initContainer and sets PYTHONPATH=/pkg in the main container (mem0
-  # library-mode pattern). Must match the imports in the script ConfigMaps.
+  # Pip pin lists for each library-mode pod. Each entry is rendered as a
+  # single-quoted shell arg so version constraints like `>=1.2,<2` don't get
+  # mangled into stdin/stderr redirections by the shell. Must match the
+  # imports in the script ConfigMaps.
   pipPins:
-    mcp: "mcp>=1.2,<2 psycopg2-binary>=2.9,<3 pgvector>=0.3,<1 httpx>=0.27,<1"
-    ingest: "httpx>=0.27,<1 trafilatura>=1.12,<3 psycopg2-binary>=2.9,<3 pgvector>=0.3,<1 lxml-html-clean>=0.4"
-    ui: "fastapi>=0.115,<1 jinja2>=3.1,<4 httpx>=0.27,<1 kubernetes>=31,<32 uvicorn>=0.32,<1"
+    mcp:
+      - "mcp>=1.2,<2"
+      - "psycopg2-binary>=2.9,<3"
+      - "pgvector>=0.3,<1"
+      - "httpx>=0.27,<1"
+    ingest:
+      - "httpx>=0.27,<1"
+      - "trafilatura>=1.12,<3"
+      - "psycopg2-binary>=2.9,<3"
+      - "pgvector>=0.3,<1"
+      - "lxml-html-clean>=0.4"
+    ui:
+      - "fastapi>=0.115,<1"
+      - "jinja2>=3.1,<4"
+      - "httpx>=0.27,<1"
+      - "kubernetes>=31,<32"
+      - "uvicorn>=0.32,<1"
 
 postgres:
   image: ankane/pgvector:v0.5.1

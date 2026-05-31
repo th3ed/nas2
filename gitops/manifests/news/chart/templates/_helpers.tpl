@@ -39,3 +39,16 @@ nodeSelector:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
+
+{{/*
+Render a pip pin list as space-separated, single-quoted shell args.
+Without per-arg quoting, version constraints like `>=1.2,<2` get parsed by
+the shell as redirections (`<2` → "read from FD 2") and pip install fails
+with "cannot open 2: No such file".
+Usage: pip install --no-cache-dir --target /pkg {{ include "news.pipArgs" .Values.runtime.pipPins.mcp }}
+*/}}
+{{- define "news.pipArgs" -}}
+{{- range $i, $pin := . -}}
+{{- if $i }} {{ end -}}'{{ $pin }}'
+{{- end -}}
+{{- end }}
