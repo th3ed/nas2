@@ -81,7 +81,12 @@ data:
     psql -h "$OLD_HOST" -U postgres -d postgres -c \
       "\copy (SELECT id, article_id, chunk_index, text, embedding FROM article_chunks ORDER BY id) TO '/tmp/old_chunks.csv' WITH CSV"
 
+    # ON_ERROR_STOP=1 + an explicit transaction. Without BEGIN/COMMIT, a
+    # failure between INSERT chunks and INSERT chunk_articles would commit
+    # half the data, and the next retry's idempotency guard (`articles > 0`)
+    # would skip Phase 3 entirely, leaving chunks orphaned permanently.
     psql -h "$NEW_HOST" -U postgres -d postgres --set ON_ERROR_STOP=1 <<SQL
+    BEGIN;
     CREATE TEMP TABLE _t (
       old_id     BIGINT,
       article_id TEXT,
@@ -97,6 +102,7 @@ data:
       SELECT old_id, article_id, chunk_index FROM _t
       ON CONFLICT DO NOTHING;
     SELECT setval('chunks_id_seq', COALESCE((SELECT MAX(id) FROM chunks), 0) + 1);
+    COMMIT;
     SQL
 
     CHUNK_COUNT=$(psql -h "$NEW_HOST" -U postgres -d postgres -tA \

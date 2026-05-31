@@ -11,14 +11,21 @@ namespace:
 nodeSelector:
   kubernetes.io/hostname: nas2
 
+# Tailnet MagicDNS domain; matches group_vars/all/main.yml. Used to derive the
+# short hostname for tailscale Ingress TLS blocks.
+tailnetDomain: taile9c9c.ts.net
+
 # Python base for all script-driven containers (mem0 library-mode pattern;
 # the chart does not ship custom images).
 runtime:
   pythonImage: python:3.12-slim
+  # Single-line pip arg lists — the chart pip-installs to /pkg in an
+  # initContainer and sets PYTHONPATH=/pkg in the main container (mem0
+  # library-mode pattern). Must match the imports in the script ConfigMaps.
   pipPins:
-    mcp: "fastmcp==0.5.* psycopg2-binary==2.9.* httpx==0.27.*"
-    ingest: "httpx==0.27.* trafilatura==1.12.* psycopg2-binary==2.9.*"
-    ui: "fastapi==0.115.* jinja2==3.1.* htmx==0.0.* httpx==0.27.* kubernetes==31.* uvicorn==0.32.*"
+    mcp: "mcp>=1.2,<2 psycopg2-binary>=2.9,<3 pgvector>=0.3,<1 httpx>=0.27,<1"
+    ingest: "httpx>=0.27,<1 trafilatura>=1.12,<3 psycopg2-binary>=2.9,<3 pgvector>=0.3,<1 lxml-html-clean>=0.4"
+    ui: "fastapi>=0.115,<1 jinja2>=3.1,<4 httpx>=0.27,<1 kubernetes>=31,<32 uvicorn>=0.32,<1"
 
 postgres:
   image: ankane/pgvector:v0.5.1
@@ -91,8 +98,9 @@ secrets:
     - envName: FRESHRSS_API_PASSWORD
       bwSecretId: bb819cab-ce11-440a-a0cf-b4520014f4b9
 
-# One-shot data migration from a pre-rename news-rag namespace. PreSync hook;
-# disable after the migration is verified and the source namespace is deleted.
+# One-shot data migration from a pre-rename news-rag namespace. PostSync hook
+# (PreSync would deadlock — the new postgres Service doesn't exist yet). Disable
+# after the migration is verified and the source namespace is deleted.
 migration:
   enabled: true
   sourceNamespace: news-rag

@@ -1,0 +1,39 @@
+---
+# news service: pgvector RAG + MCP server over FreshRSS articles. Replaces
+# news-rag (PR 1 of the refactor — old Application stays running until PR 2
+# verifies migration). The chart templates everything in-tree (postgres,
+# MCP, ingest CronJob, BitwardenSecret, Tailscale Ingress, one-shot
+# PostSync data-migration Job, one-shot AgentRegistry cleanup Job), so this
+# Application uses only the two-source pattern (chart + $values).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: news
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/news/chart
+      helm:
+        releaseName: news
+        valueFiles:
+          - $values/gitops/manifests/news/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: news
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

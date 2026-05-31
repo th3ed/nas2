@@ -16,4 +16,7 @@ bitwarden_namespaces:
   - hermes
   - agentregistry
   - mem0
+  # news-rag is retained until PR 2 removes the old Application; the migration
+  # Job in the new `news` chart reads from the old DB during cutover.
   - news-rag
+  - news

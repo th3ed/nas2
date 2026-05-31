@@ -1,0 +1,105 @@
+{{- if .Values.ingest.enabled }}
+# Every {{ .Values.ingest.schedule | quote }}, poll FreshRSS for new articles,
+# extract bodies, embed into pgvector, generate summaries. Idempotent on
+# FreshRSS item-id.
+#
+# concurrencyPolicy: Forbid — a slow run (large backfill) must not get
+# double-scheduled and race the ingest_state row.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: news-ingest
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "ingest" "ctx" .) | nindent 4 }}
+spec:
+  schedule: {{ .Values.ingest.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "news.componentLabels" (dict "component" "ingest" "ctx" .) | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          {{- include "news.nodeSelector" . | nindent 10 }}
+          # LAN DNS (192.168.111.3) is intermittently unavailable, causing
+          # transient EAI_NONAME failures for the private andrews.casa zone.
+          # Pin FreshRSS to its LAN IP so ingest doesn't depend on LAN DNS.
+          hostAliases:
+            - ip: "192.168.111.10"
+              hostnames:
+                - "freshrss.andrews.casa"
+          initContainers:
+            - name: pip-install
+              image: {{ .Values.runtime.pythonImage }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  pip install --no-cache-dir --target /pkg {{ .Values.runtime.pipPins.ingest }}
+              volumeMounts:
+                - name: pkg
+                  mountPath: /pkg
+          containers:
+            - name: ingest
+              image: {{ .Values.runtime.pythonImage }}
+              imagePullPolicy: IfNotPresent
+              command: ["python", "/app/ingest.py"]
+              env:
+                - name: PYTHONPATH
+                  value: /pkg
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+                - name: PG_HOST
+                  value: postgres.{{ .Values.namespace.name }}
+                - name: PG_PORT
+                  value: "5432"
+                - name: PG_DB
+                  value: postgres
+                - name: PG_USER
+                  value: postgres
+                - name: LITELLM_BASE_URL
+                  value: {{ .Values.litellm.baseUrl }}
+                - name: MODEL_EMBEDDING
+                  value: {{ .Values.litellm.embedModel }}
+                - name: MODEL_SUMMARY
+                  value: {{ .Values.litellm.summarizeModel | quote }}
+                - name: BACKFILL_DAYS
+                  value: {{ .Values.ingest.backfillDays | quote }}
+                - name: FETCH_BATCH
+                  value: {{ .Values.ingest.fetchBatch | quote }}
+                - name: CHUNK_SIZE
+                  value: {{ .Values.ingest.chunkSize | quote }}
+                - name: CHUNK_OVERLAP
+                  value: {{ .Values.ingest.chunkOverlap | quote }}
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.secrets.secretName }}
+                    optional: false
+              volumeMounts:
+                - name: pkg
+                  mountPath: /pkg
+                  readOnly: true
+                - name: script
+                  mountPath: /app
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: pkg
+              emptyDir: {}
+            - name: script
+              configMap:
+                name: news-ingest-script
+{{- end }}

@@ -1,0 +1,16 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-mcp
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "mcp" "ctx" .) | nindent 4 }}
+spec:
+  selector:
+    {{- include "news.selectorLabels" (dict "component" "mcp" "ctx" .) | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+{{- end }}

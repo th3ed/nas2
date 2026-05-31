@@ -1,0 +1,100 @@
+{{- if .Values.mcp.enabled }}
+# news MCP server. python:3.12-slim + initContainer pip-install to /pkg,
+# ConfigMap-mounted script at /app (mem0 library-mode pattern).
+#
+# strategy Recreate: single Postgres backend and FastMCP's streamable-http
+# session state is in-process — rolling two pods would race the DB pool
+# and split MCP sessions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-mcp
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "news.componentLabels" (dict "component" "mcp" "ctx" .) | nindent 4 }}
+spec:
+  replicas: {{ .Values.mcp.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "news.selectorLabels" (dict "component" "mcp" "ctx" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "news.componentLabels" (dict "component" "mcp" "ctx" .) | nindent 8 }}
+    spec:
+      {{- include "news.nodeSelector" . | nindent 6 }}
+      initContainers:
+        - name: pip-install
+          image: {{ .Values.runtime.pythonImage }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              pip install --no-cache-dir --target /pkg {{ .Values.runtime.pipPins.mcp }}
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+      containers:
+        - name: mcp
+          image: {{ .Values.runtime.pythonImage }}
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/news_mcp.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PYTHONPATH
+              value: /pkg
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PG_HOST
+              value: postgres.{{ .Values.namespace.name }}
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DB
+              value: postgres
+            - name: PG_USER
+              value: postgres
+            - name: LITELLM_BASE_URL
+              value: {{ .Values.litellm.baseUrl }}
+            - name: MODEL_EMBEDDING
+              value: {{ .Values.litellm.embedModel }}
+            - name: FASTMCP_HOST
+              value: 0.0.0.0
+            - name: FASTMCP_PORT
+              value: "8080"
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.secretName }}
+                optional: false
+          volumeMounts:
+            - name: pkg
+              mountPath: /pkg
+              readOnly: true
+            - name: script
+              mountPath: /app
+              readOnly: true
+          readinessProbe:
+            # MCP streamable-http rejects probes without Accept: text/event-stream
+            # with 406, which kubelet's httpGet treats as failure. tcpSocket = up.
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.mcp.resources | nindent 12 }}
+      volumes:
+        - name: pkg
+          emptyDir: {}
+        - name: script
+          configMap:
+            name: news-mcp-script
+{{- end }}

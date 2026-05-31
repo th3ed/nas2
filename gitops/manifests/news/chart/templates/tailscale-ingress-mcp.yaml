@@ -1,0 +1,25 @@
+{{- if .Values.mcp.enabled }}
+# Exposes the news MCP server on the tailnet. Tailnet membership is the
+# auth boundary; no token auth on the MCP itself (same as openclaw/ollama).
+# Clients MUST hit https://<host>/mcp (no trailing slash) — see CLAUDE.md
+# gotcha on FastMCP + TLS-terminating proxy.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: news-mcp
+  namespace: {{ .Values.namespace.name }}
+  annotations:
+    tailscale.com/http-redirect: "true"
+  labels:
+    {{- include "news.componentLabels" (dict "component" "mcp" "ctx" .) | nindent 4 }}
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: news-mcp
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - {{ .Values.mcp.hostname | trimSuffix (printf ".%s" .Values.tailnetDomain) }}
+{{- end }}

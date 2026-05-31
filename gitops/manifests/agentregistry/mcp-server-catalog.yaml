@@ -45,13 +45,13 @@ data:
       },
       {
         "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-        "name": "news-rag.news-rag-mcp/articles",
+        "name": "news.news-mcp/articles",
         "description": "Semantic search, briefings, and read/star tools over your FreshRSS articles in pgvector.",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "remotes": [
           {
             "type": "streamable-http",
-            "url": "http://news-rag-mcp.news-rag:8080/mcp/"
+            "url": "http://news-mcp.news:8080/mcp/"
           }
         ]
       }
