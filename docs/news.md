@@ -136,7 +136,7 @@ curl -sN -X POST \
 ## Web UI
 
 A separate FastAPI + Jinja dashboard runs alongside the MCP server at
-`https://news-ui.taile9c9c.ts.net/`. Three views:
+`https://newsdash.taile9c9c.ts.net/`. Three views:
 
 - `/` — ops dashboard: article + chunk + multi-cite counts, ingest_state
   high-water values, last 20 ingest runs with per-stage timings, and a
