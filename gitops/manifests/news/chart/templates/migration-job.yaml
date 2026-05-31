@@ -16,7 +16,9 @@ metadata:
     {{- include "news.componentLabels" (dict "component" "migration" "ctx" .) | nindent 4 }}
 data:
   migrate.sh: |
-    #!/bin/sh
+    #!/bin/bash
+    # Need bash for `set -o pipefail`; the ankane/pgvector base image's
+    # /bin/sh is dash, which rejects -o pipefail with "Illegal option".
     set -euo pipefail
 
     OLD_HOST="news-rag-postgres.{{ .Values.migration.sourceNamespace }}.svc.cluster.local"
@@ -134,7 +136,7 @@ spec:
       containers:
         - name: migrate
           image: {{ .Values.postgres.image }}
-          command: ["sh", "/scripts/migrate.sh"]
+          command: ["bash", "/scripts/migrate.sh"]
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
