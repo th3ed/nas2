@@ -62,10 +62,15 @@ ingest:
   fetchBatch: 200
   chunkSize: 2000
   chunkOverlap: 200
-  embedConcurrency: 64
+  # Caps the parallel body-fetch fan-out (NOT the embeddings call itself, which
+  # is one batched POST). 8 is conservative for arbitrary news sources.
+  embedConcurrency: 8
   summarizeConcurrency: 8
 
 dedup:
+  # Cosine similarity at or above this value collapses a new chunk into the
+  # existing nearest-neighbour chunk (citation_ct += 1). 0.95 = effectively
+  # paraphrase-or-tighter (AP wire reprints typically score >0.97).
   cosineThreshold: 0.95
 
 mcp:

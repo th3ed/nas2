@@ -79,6 +79,12 @@ spec:
                   value: {{ .Values.ingest.chunkSize | quote }}
                 - name: CHUNK_OVERLAP
                   value: {{ .Values.ingest.chunkOverlap | quote }}
+                - name: EMBED_CONCURRENCY
+                  value: {{ .Values.ingest.embedConcurrency | quote }}
+                - name: SUMMARIZE_CONCURRENCY
+                  value: {{ .Values.ingest.summarizeConcurrency | quote }}
+                - name: DEDUP_COSINE_THRESHOLD
+                  value: {{ .Values.dedup.cosineThreshold | quote }}
               envFrom:
                 - secretRef:
                     name: {{ .Values.secrets.secretName }}

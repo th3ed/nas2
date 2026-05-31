@@ -8,9 +8,29 @@ metadata:
 data:
   ingest.py: |
     """FreshRSS -> trafilatura -> chunk -> embed -> summarize -> pgvector.
-    Idempotent on article id. Writes into chunks + chunk_articles (the new
-    schema); no near-duplicate collapse yet — that lands in PR 3."""
+
+    Stage-batched async pipeline:
+      1. FreshRSS metadata (sync, paginated)
+      2. SQL filter unknown article ids
+      3. Bulk-insert article rows in 'pending' status
+      4. Parallel body extraction (httpx.AsyncClient + asyncio.gather, capped
+         by EMBED_CONCURRENCY)
+      5. Chunk all bodies in-memory
+      6. ONE LiteLLM /embeddings call with every chunk text (batched)
+      7. Per-chunk near-duplicate dedup against existing chunks (HNSW
+         cosine lookup, threshold from DEDUP_COSINE_THRESHOLD). On hit:
+         reuse chunk_id and increment citation_ct. On miss: insert new chunk.
+      8. Parallel summaries (asyncio + SUMMARIZE_CONCURRENCY)
+      9. Bulk article body/summary updates, ingest_state + ingest_runs row.
+
+    The pipeline writes an `ingest_runs` row at the start of each cycle and
+    closes it with final stats (items_fetched, items_inserted, chunks_inserted,
+    chunks_dedup, metrics) when done. The web UI dashboard (PR 6) reads this
+    table for the ops view.
+    """
+    import asyncio
     import hashlib
+    import json
     import logging
     import os
     import re
@@ -21,6 +41,7 @@ data:
 
     import httpx
     import psycopg2
+    import psycopg2.extras
     import trafilatura
     from pgvector.psycopg2 import register_vector
 
@@ -48,7 +69,16 @@ data:
     FETCH_BATCH = int(os.environ.get("FETCH_BATCH", "200"))
     CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", "2000"))
     CHUNK_OVERLAP = int(os.environ.get("CHUNK_OVERLAP", "200"))
+    EMBED_CONCURRENCY = int(os.environ.get("EMBED_CONCURRENCY", "8"))
+    SUMMARIZE_CONCURRENCY = int(os.environ.get("SUMMARIZE_CONCURRENCY", "8"))
+    DEDUP_COSINE_THRESHOLD = float(os.environ.get("DEDUP_COSINE_THRESHOLD", "0.95"))
     USER_AGENT = "nas2-news/1.0 (+https://github.com/th3ed/nas2)"
+
+    # cosine distance threshold below which a new chunk is treated as a
+    # near-duplicate of an existing one. 0.95 sim ↔ 0.05 distance.
+    DEDUP_DIST_CUTOFF = 1.0 - DEDUP_COSINE_THRESHOLD
+
+    # --- FreshRSS (sync) ---
 
     _FR_RETRY_EXCS = (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError)
 
@@ -106,14 +136,22 @@ data:
             if not cont:
                 return
 
-    def fetch_body(url: str) -> tuple[str, str]:
+    def html_to_text(html: str) -> str:
+        return " ".join(re.sub(r"<[^>]+>", " ", html or "").split())
+
+    # --- Body extraction (async) ---
+
+    async def fetch_body(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
+        """Returns (text, status). status in {'ok','too_short','fetch_failed'}."""
         try:
-            r = httpx.get(
+            r = await client.get(
                 url, timeout=15, follow_redirects=True,
                 headers={"User-Agent": USER_AGENT},
             )
             if r.status_code >= 400:
                 return "", "fetch_failed"
+            # trafilatura.extract is CPU-bound but fast (sub-100ms typical) —
+            # don't bother offloading.
             body = trafilatura.extract(r.text) or ""
             if len(body) < 200:
                 return body, "too_short"
@@ -122,8 +160,16 @@ data:
             log.warning("fetch failed %s: %s", url, exc)
             return "", "fetch_failed"
 
-    def html_to_text(html: str) -> str:
-        return " ".join(re.sub(r"<[^>]+>", " ", html or "").split())
+    async def fetch_bodies(urls: list[str]) -> list[tuple[str, str]]:
+        """Returns list aligned with `urls` of (body, status)."""
+        sem = asyncio.Semaphore(EMBED_CONCURRENCY)
+        async with httpx.AsyncClient() as client:
+            async def bound(u):
+                async with sem:
+                    return await fetch_body(client, u)
+            return await asyncio.gather(*(bound(u) for u in urls))
+
+    # --- Chunking ---
 
     def chunk_text(text: str, target: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
         if len(text) <= target:
@@ -150,7 +196,13 @@ data:
                     out.append(seg)
         return out
 
-    def embed(texts: list[str]) -> list[list[float]]:
+    # --- LLM calls ---
+
+    def embed_batch(texts: list[str]) -> list[list[float]]:
+        """ONE /embeddings call for the whole cycle's chunks. LiteLLM proxies
+        to Ollama's nomic-embed-text in one shot; embed dim = 768."""
+        if not texts:
+            return []
         r = httpx.post(
             f"{LITELLM_BASE}/embeddings",
             headers={
@@ -158,7 +210,7 @@ data:
                 "Content-Type": "application/json",
             },
             json={"model": MODEL_EMBEDDING, "input": texts},
-            timeout=180,
+            timeout=300,
         )
         r.raise_for_status()
         return [d["embedding"] for d in r.json()["data"]]
@@ -169,9 +221,9 @@ data:
         "Title: {title}\n\nArticle:\n{body}\n\nSummary:"
     )
 
-    def summarize(title: str, body: str) -> str:
+    async def summarize_one(client: httpx.AsyncClient, title: str, body: str) -> str:
         prompt = SUMMARY_PROMPT.format(title=title, body=body[:8000])
-        r = httpx.post(
+        r = await client.post(
             f"{LITELLM_BASE}/chat/completions",
             headers={
                 "Authorization": f"Bearer {LITELLM_KEY}",
@@ -187,156 +239,359 @@ data:
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
 
-    def main() -> int:
+    async def summarize_all(items: list[tuple[str, str, str]]) -> dict[str, str]:
+        """items: [(article_id, title, body), ...]. Returns {article_id: summary}."""
+        sem = asyncio.Semaphore(SUMMARIZE_CONCURRENCY)
+        async with httpx.AsyncClient() as client:
+            async def bound(aid, title, body):
+                async with sem:
+                    try:
+                        return aid, await summarize_one(client, title, body)
+                    except Exception as exc:
+                        log.warning("summarize failed for %s: %s", aid[:60], exc)
+                        return aid, ""
+            results = await asyncio.gather(*(bound(*it) for it in items))
+        return {aid: summary for aid, summary in results if summary}
+
+    # --- Dedup ---
+
+    def find_near_duplicate_chunk(cur, vec: list[float]) -> int | None:
+        """HNSW cosine lookup against existing chunks. Returns existing
+        chunks.id if the nearest neighbour is within DEDUP_DIST_CUTOFF,
+        else None. Sub-ms per call thanks to the index."""
+        cur.execute(
+            "SELECT id, embedding <=> %s::vector AS dist "
+            "FROM chunks "
+            "ORDER BY embedding <=> %s::vector "
+            "LIMIT 1",
+            (vec, vec),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        cid, dist = row
+        return cid if dist <= DEDUP_DIST_CUTOFF else None
+
+    # --- Main ---
+
+    async def main_async() -> int:
         conn = psycopg2.connect(**PG)
         register_vector(conn)
 
+        # Open ingest_runs row immediately so the dashboard can see it
+        # in-flight.
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT last_article_published_at, backfill_completed "
-                "FROM ingest_state WHERE id = 1"
+                "INSERT INTO ingest_runs (status, trigger) VALUES ('running', 'cron') "
+                "RETURNING id",
             )
-            row = cur.fetchone() or (None, False)
-        last_pub, backfilled = row
+            run_id = cur.fetchone()[0]
+        conn.commit()
 
-        if not last_pub or not backfilled:
-            since = datetime.now(timezone.utc) - timedelta(days=BACKFILL_DAYS)
-            log.info("backfill mode, since=%s", since.isoformat())
-        else:
-            since = last_pub - timedelta(hours=1)
-            log.info("incremental mode, since=%s", since.isoformat())
-        since_ts = int(since.timestamp())
+        metrics: dict[str, float] = {}
+        errors: list[dict] = []
+        items_fetched = 0
+        items_inserted = 0
+        chunks_inserted = 0
+        chunks_dedup = 0
 
-        auth = fr_login()
-
-        inserted = 0
-        skipped = 0
-        failed = 0
-        max_pub_ts = int(last_pub.timestamp()) if last_pub else 0
-
-        for item in fr_articles_since(auth, since_ts):
-            item_id = item.get("id") or ""
-            if not item_id:
-                continue
-            pub_ts = int(item.get("published") or 0)
-            if pub_ts > max_pub_ts:
-                max_pub_ts = pub_ts
-            title = item.get("title") or ""
-            author = item.get("author") or ""
-            origin = item.get("origin") or {}
-            feed_title = origin.get("title") or ""
-            feed_id = origin.get("streamId") or ""
-            cats_raw = item.get("categories") or []
-            labels = [c.split("/label/")[-1] for c in cats_raw if "/label/" in c]
-            category = labels[0] if labels else ""
-            url = next(
-                (a.get("href") for a in (item.get("alternate") or []) if a.get("href")),
-                "",
-            )
-            is_read = "user/-/state/com.google/read" in cats_raw
-            is_starred = "user/-/state/com.google/starred" in cats_raw
-            fr_html = (item.get("summary") or {}).get("content") or ""
-            published_at = (
-                datetime.fromtimestamp(pub_ts, tz=timezone.utc)
-                if pub_ts else datetime.now(timezone.utc)
-            )
-
-            if not url:
-                continue
-
+        try:
             with conn.cursor() as cur:
                 cur.execute(
+                    "SELECT last_article_published_at, backfill_completed "
+                    "FROM ingest_state WHERE id = 1"
+                )
+                row = cur.fetchone() or (None, False)
+            last_pub, backfilled = row
+
+            if not last_pub or not backfilled:
+                since = datetime.now(timezone.utc) - timedelta(days=BACKFILL_DAYS)
+                log.info("backfill mode, since=%s", since.isoformat())
+            else:
+                since = last_pub - timedelta(hours=1)
+                log.info("incremental mode, since=%s", since.isoformat())
+            since_ts = int(since.timestamp())
+
+            # Stage 1: pull FreshRSS metadata.
+            t0 = time.monotonic()
+            auth = fr_login()
+            items = list(fr_articles_since(auth, since_ts))
+            metrics["fr_pull_seconds"] = round(time.monotonic() - t0, 2)
+            items_fetched = len(items)
+            log.info("fetched %d FreshRSS items", items_fetched)
+
+            # Stage 2: filter unknown IDs.
+            # Articles that finished extraction (status in ok/too_short) are
+            # "known and complete" → skip. Articles in 'pending' or
+            # 'fetch_failed' are eligible for retry — a prior run that crashed
+            # between INSERT and the final body UPDATE shouldn't strand the row
+            # in pending forever.
+            ids = [(item.get("id") or "") for item in items]
+            ids = [i for i in ids if i]
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM articles "
+                    "WHERE id = ANY(%s) "
+                    "  AND extraction_status IN ('ok', 'too_short')",
+                    (ids,),
+                )
+                known = {r[0] for r in cur.fetchall()}
+
+            max_pub_ts = int(last_pub.timestamp()) if last_pub else 0
+            new_records: list[dict] = []
+            for item in items:
+                item_id = item.get("id") or ""
+                if not item_id or item_id in known:
+                    continue
+                pub_ts = int(item.get("published") or 0)
+                if pub_ts > max_pub_ts:
+                    max_pub_ts = pub_ts
+                origin = item.get("origin") or {}
+                cats_raw = item.get("categories") or []
+                labels = [c.split("/label/")[-1] for c in cats_raw if "/label/" in c]
+                url = next(
+                    (a.get("href") for a in (item.get("alternate") or []) if a.get("href")),
+                    "",
+                )
+                if not url:
+                    continue
+                published_at = (
+                    datetime.fromtimestamp(pub_ts, tz=timezone.utc)
+                    if pub_ts else datetime.now(timezone.utc)
+                )
+                fr_html = (item.get("summary") or {}).get("content") or ""
+                new_records.append({
+                    "id": item_id,
+                    "feed_id": origin.get("streamId") or "",
+                    "feed_title": origin.get("title") or "",
+                    "category": labels[0] if labels else "",
+                    "title": item.get("title") or "",
+                    "author": item.get("author") or "",
+                    "url": url,
+                    "published_at": published_at,
+                    "is_read": "user/-/state/com.google/read" in cats_raw,
+                    "is_starred": "user/-/state/com.google/starred" in cats_raw,
+                    "fr_html": fr_html,
+                })
+
+            if not new_records:
+                log.info("no new articles")
+                return 0
+
+            # Stage 3: bulk insert article rows in pending state.
+            with conn.cursor() as cur:
+                psycopg2.extras.execute_batch(
+                    cur,
                     """INSERT INTO articles (
                            id, feed_id, feed_title, category, title, author, url,
                            published_at, body_source, extraction_status, content_hash,
                            read, starred, state_synced_at)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s, %s, %s,%s,%s, %s,%s, now())
-                       ON CONFLICT (id) DO NOTHING
-                       RETURNING id""",
-                    (item_id, feed_id, feed_title, category, title, author, url,
-                     published_at, "pending", "pending", "", is_read, is_starred),
+                       VALUES (%(id)s, %(feed_id)s, %(feed_title)s, %(category)s,
+                               %(title)s, %(author)s, %(url)s, %(published_at)s,
+                               'pending', 'pending', '', %(is_read)s, %(is_starred)s, now())
+                       ON CONFLICT (id) DO NOTHING""",
+                    new_records,
                 )
-                if not cur.fetchone():
-                    skipped += 1
-                    continue
             conn.commit()
+            log.info("inserted %d pending article rows", len(new_records))
 
-            body, status = fetch_body(url)
-            source = "trafilatura"
-            if status != "ok" and fr_html:
-                body = html_to_text(fr_html)
-                source = "freshrss_fallback"
-                status = "ok" if len(body) >= 200 else "too_short"
+            # Stage 4: parallel body extraction.
+            t0 = time.monotonic()
+            urls = [r["url"] for r in new_records]
+            bodies = await fetch_bodies(urls)
+            metrics["body_fetch_seconds"] = round(time.monotonic() - t0, 2)
 
-            if status != "ok":
+            # Pair each record with its fetched body + status, applying the
+            # FreshRSS HTML fallback when trafilatura missed.
+            for rec, (body, status) in zip(new_records, bodies):
+                source = "trafilatura"
+                if status != "ok" and rec["fr_html"]:
+                    body = html_to_text(rec["fr_html"])
+                    source = "freshrss_fallback"
+                    status = "ok" if len(body) >= 200 else "too_short"
+                rec["body"] = body
+                rec["status"] = status
+                rec["body_source"] = source
+
+            ok_records = [r for r in new_records if r["status"] == "ok"]
+            log.info(
+                "extracted bodies: %d ok / %d total",
+                len(ok_records), len(new_records),
+            )
+
+            # Bulk-update extraction failures so they don't reappear on retry.
+            failed = [r for r in new_records if r["status"] != "ok"]
+            if failed:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE articles SET body_source=%s, extraction_status=%s, "
-                        "body_text=%s WHERE id=%s",
-                        (source, status, body or "", item_id),
+                    psycopg2.extras.execute_batch(
+                        cur,
+                        "UPDATE articles SET body_source=%(body_source)s, "
+                        "extraction_status=%(status)s, body_text=%(body)s "
+                        "WHERE id=%(id)s",
+                        failed,
                     )
                 conn.commit()
-                failed += 1
-                log.info("extraction %s for %s", status, url[:80])
-                continue
 
-            try:
-                chunks = chunk_text(body)
-                if not chunks:
-                    raise RuntimeError("zero chunks")
-                embeddings = embed(chunks)
-                summary = summarize(title, body)
-                content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
-                with conn.cursor() as cur:
-                    # New schema: insert each chunk into `chunks`, capture its
-                    # generated id, link it to the article via `chunk_articles`.
-                    # No dedup in PR 1 — citation_ct defaults to 1. Stage-batching
-                    # + near-duplicate collapse lands in PR 3.
-                    for i, (chunk, vec) in enumerate(zip(chunks, embeddings)):
+            # Stage 5: chunk all bodies in memory.
+            # all_chunks: list of (record_index, position, text).
+            all_chunks: list[tuple[int, int, str]] = []
+            for idx, rec in enumerate(ok_records):
+                cs = chunk_text(rec["body"])
+                if not cs:
+                    rec["chunk_failed"] = True
+                    continue
+                for pos, c in enumerate(cs):
+                    all_chunks.append((idx, pos, c))
+            log.info(
+                "produced %d chunks across %d articles",
+                len(all_chunks), len(ok_records),
+            )
+
+            # Stage 6: ONE big embeddings call.
+            t0 = time.monotonic()
+            chunk_texts = [c[2] for c in all_chunks]
+            embeddings = embed_batch(chunk_texts)
+            metrics["embed_seconds"] = round(time.monotonic() - t0, 2)
+
+            # Stage 7: dedup pass + bulk insert chunks + links.
+            t0 = time.monotonic()
+            chunk_article_rows: list[tuple[int, str, int]] = []
+            with conn.cursor() as cur:
+                for (rec_idx, pos, text), vec in zip(all_chunks, embeddings):
+                    article_id = ok_records[rec_idx]["id"]
+                    existing = find_near_duplicate_chunk(cur, vec)
+                    if existing is not None:
                         cur.execute(
-                            "INSERT INTO chunks (text, embedding) VALUES (%s, %s) RETURNING id",
-                            (chunk, vec),
+                            "UPDATE chunks SET citation_ct = citation_ct + 1 "
+                            "WHERE id = %s",
+                            (existing,),
+                        )
+                        chunk_id = existing
+                        chunks_dedup += 1
+                    else:
+                        cur.execute(
+                            "INSERT INTO chunks (text, embedding) VALUES (%s, %s) "
+                            "RETURNING id",
+                            (text, vec),
                         )
                         chunk_id = cur.fetchone()[0]
-                        cur.execute(
-                            "INSERT INTO chunk_articles (chunk_id, article_id, position) "
-                            "VALUES (%s, %s, %s)",
-                            (chunk_id, item_id, i),
-                        )
-                    cur.execute(
-                        """UPDATE articles
-                           SET body_text=%s, body_source=%s, extraction_status='ok',
-                               summary=%s, content_hash=%s
-                           WHERE id=%s""",
-                        (body, source, summary, content_hash, item_id),
+                        chunks_inserted += 1
+                    chunk_article_rows.append((chunk_id, article_id, pos))
+
+                psycopg2.extras.execute_batch(
+                    cur,
+                    "INSERT INTO chunk_articles (chunk_id, article_id, position) "
+                    "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                    chunk_article_rows,
+                )
+            conn.commit()
+            metrics["dedup_seconds"] = round(time.monotonic() - t0, 2)
+
+            # Stage 8: parallel summaries (skip articles with no chunks).
+            summarize_items = [
+                (r["id"], r["title"], r["body"])
+                for r in ok_records
+                if not r.get("chunk_failed")
+            ]
+            t0 = time.monotonic()
+            summaries = await summarize_all(summarize_items)
+            metrics["summarize_seconds"] = round(time.monotonic() - t0, 2)
+            log.info("summarized %d / %d articles", len(summaries), len(summarize_items))
+
+            # Stage 9: bulk-update article rows with body, summary, content_hash.
+            updates = []
+            for rec in ok_records:
+                if rec.get("chunk_failed"):
+                    continue
+                updates.append({
+                    "id": rec["id"],
+                    "body_text": rec["body"],
+                    "body_source": rec["body_source"],
+                    "summary": summaries.get(rec["id"]) or None,
+                    "content_hash": hashlib.sha256(rec["body"].encode("utf-8")).hexdigest(),
+                })
+            if updates:
+                with conn.cursor() as cur:
+                    psycopg2.extras.execute_batch(
+                        cur,
+                        "UPDATE articles "
+                        "SET body_text=%(body_text)s, body_source=%(body_source)s, "
+                        "    extraction_status='ok', summary=%(summary)s, "
+                        "    content_hash=%(content_hash)s "
+                        "WHERE id=%(id)s",
+                        updates,
                     )
                 conn.commit()
-                inserted += 1
-                log.info("ingested %d chunks: %s", len(chunks), title[:80])
-            except Exception as exc:
+            items_inserted = len(updates)
+
+            # ingest_state high-water bump.
+            with conn.cursor() as cur:
+                if max_pub_ts > 0:
+                    new_last = datetime.fromtimestamp(max_pub_ts, tz=timezone.utc)
+                    cur.execute(
+                        "UPDATE ingest_state "
+                        "SET last_article_published_at=%s, last_successful_run_at=now(), "
+                        "    backfill_completed=true "
+                        "WHERE id=1",
+                        (new_last,),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE ingest_state SET last_successful_run_at=now() WHERE id=1"
+                    )
+            conn.commit()
+
+            log.info(
+                "done items=%d inserted=%d chunks_new=%d chunks_dedup=%d metrics=%s",
+                items_fetched, items_inserted, chunks_inserted, chunks_dedup,
+                json.dumps(metrics),
+            )
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE ingest_runs SET finished_at=now(), status=%s, "
+                    "items_fetched=%s, items_inserted=%s, "
+                    "chunks_inserted=%s, chunks_dedup=%s, metrics=%s "
+                    "WHERE id=%s",
+                    (
+                        "ok",
+                        items_fetched, items_inserted,
+                        chunks_inserted, chunks_dedup,
+                        json.dumps(metrics),
+                        run_id,
+                    ),
+                )
+            conn.commit()
+            return 0
+
+        except Exception as exc:
+            log.exception("ingest failed")
+            errors.append({"message": str(exc)})
+            try:
                 conn.rollback()
-                log.error("post-fetch failed for %s: %s", item_id[:60], exc)
-                failed += 1
-
-        with conn.cursor() as cur:
-            if max_pub_ts > 0:
-                new_last = datetime.fromtimestamp(max_pub_ts, tz=timezone.utc)
-                cur.execute(
-                    "UPDATE ingest_state "
-                    "SET last_article_published_at=%s, last_successful_run_at=now(), "
-                    "    backfill_completed=true "
-                    "WHERE id=1",
-                    (new_last,),
-                )
-            else:
-                cur.execute(
-                    "UPDATE ingest_state SET last_successful_run_at=now() WHERE id=1"
-                )
-        conn.commit()
-        conn.close()
-
-        log.info("done inserted=%d skipped=%d failed=%d", inserted, skipped, failed)
-        return 0
+            except Exception:
+                pass
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE ingest_runs SET finished_at=now(), status=%s, "
+                        "items_fetched=%s, items_inserted=%s, "
+                        "chunks_inserted=%s, chunks_dedup=%s, "
+                        "metrics=%s, errors=%s WHERE id=%s",
+                        (
+                            "failed",
+                            items_fetched, items_inserted,
+                            chunks_inserted, chunks_dedup,
+                            json.dumps(metrics), json.dumps(errors),
+                            run_id,
+                        ),
+                    )
+                conn.commit()
+            except Exception:
+                log.exception("failed to mark ingest_runs row as failed")
+            return 1
+        finally:
+            conn.close()
 
     if __name__ == "__main__":
-        sys.exit(main())
+        sys.exit(asyncio.run(main_async()))
