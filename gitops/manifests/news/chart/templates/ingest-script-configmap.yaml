@@ -376,6 +376,16 @@ data:
 
             if not new_records:
                 log.info("no new articles")
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE ingest_runs SET finished_at=now(), status='ok', "
+                        "items_fetched=%s, metrics=%s WHERE id=%s",
+                        (items_fetched, json.dumps(metrics), run_id),
+                    )
+                    cur.execute(
+                        "UPDATE ingest_state SET last_successful_run_at=now() WHERE id=1"
+                    )
+                conn.commit()
                 return 0
 
             # Stage 3: bulk insert article rows in pending state.
