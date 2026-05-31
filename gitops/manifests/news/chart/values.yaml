@@ -105,21 +105,21 @@ secrets:
     - envName: FRESHRSS_API_PASSWORD
       bwSecretId: bb819cab-ce11-440a-a0cf-b4520014f4b9
 
-# One-shot data migration from a pre-rename news-rag namespace. PostSync hook
-# (PreSync would deadlock — the new postgres Service doesn't exist yet). Disable
-# after the migration is verified and the source namespace is deleted.
+# One-shot data migration from a pre-rename news-rag namespace. Disabled
+# after PR 1 verified the cutover (the new ingest cron backfilled from
+# FreshRSS faster than the migration script could run, so the idempotency
+# guard skipped it cleanly). Set enabled=true only if redeploying to a
+# cluster that still has a pre-rename news-rag postgres to drain.
 migration:
-  enabled: true
+  enabled: false
   sourceNamespace: news-rag
   sourcePostgresService: news-rag-postgres
-  # Same Bitwarden POSTGRES_PASSWORD applies to both old and new DB, so we
-  # only consume the one mapping in secrets.mappings above.
 
-# One-shot DELETE of the old AgentRegistry server entry (the registry-sync
-# hook is idempotent on add but never removes). Disable after the rename PR
-# has been merged and the old entry is gone.
+# One-shot DELETE of the old AgentRegistry server entry. Disabled after PR 1
+# successfully removed it; re-enable only for a fresh deploy whose registry
+# still has the pre-rename `news-rag.news-rag-mcp/articles` entry.
 registryCleanup:
-  enabled: true
+  enabled: false
   registryUrl: http://agentregistry.agentregistry:12121
   oldServerName: "news-rag.news-rag-mcp/articles"
   oldServerVersion: "1.0.0"
