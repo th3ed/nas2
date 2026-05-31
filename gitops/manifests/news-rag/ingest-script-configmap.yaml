@@ -18,6 +18,7 @@ data:
     import os
     import re
     import sys
+    import time
     from datetime import datetime, timedelta, timezone
     from urllib.parse import quote
 
@@ -52,17 +53,40 @@ data:
 
     # --- FreshRSS Google Reader API ---
 
+    _FR_RETRY_EXCS = (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError)
+
+    def _fr_get(url, *, params=None, headers=None, timeout=60) -> httpx.Response:
+        delay = 2
+        for attempt in range(3):
+            try:
+                return httpx.get(url, params=params, headers=headers, timeout=timeout)
+            except _FR_RETRY_EXCS as exc:
+                if attempt == 2:
+                    raise
+                log.warning("FreshRSS GET failed (attempt %d/3): %s — retry in %ds", attempt + 1, exc, delay)
+                time.sleep(delay)
+                delay *= 2
+
     def fr_login() -> str:
-        r = httpx.post(
-            f"{FRESHRSS_URL}/api/greader.php/accounts/ClientLogin",
-            data={"Email": FRESHRSS_USER, "Passwd": FRESHRSS_PW},
-            timeout=30,
-        )
-        r.raise_for_status()
-        for line in r.text.splitlines():
-            if line.startswith("Auth="):
-                return line[5:]
-        raise RuntimeError("ClientLogin response missing Auth= line")
+        delay = 2
+        for attempt in range(3):
+            try:
+                r = httpx.post(
+                    f"{FRESHRSS_URL}/api/greader.php/accounts/ClientLogin",
+                    data={"Email": FRESHRSS_USER, "Passwd": FRESHRSS_PW},
+                    timeout=30,
+                )
+                r.raise_for_status()
+                for line in r.text.splitlines():
+                    if line.startswith("Auth="):
+                        return line[5:]
+                raise RuntimeError("ClientLogin response missing Auth= line")
+            except _FR_RETRY_EXCS as exc:
+                if attempt == 2:
+                    raise
+                log.warning("FreshRSS login failed (attempt %d/3): %s — retry in %ds", attempt + 1, exc, delay)
+                time.sleep(delay)
+                delay *= 2
 
     def fr_articles_since(auth: str, since_ts: int):
         # `ot` = older-than-cutoff in the GReader API. Items with crawled-at
@@ -76,10 +100,9 @@ data:
             p = dict(params)
             if cont:
                 p["c"] = cont
-            r = httpx.get(
+            r = _fr_get(
                 url, params=p,
                 headers={"Authorization": f"GoogleLogin auth={auth}"},
-                timeout=60,
             )
             r.raise_for_status()
             data = r.json()
