@@ -41,6 +41,7 @@ runtime:
       - "httpx>=0.27,<1"
       - "kubernetes>=31,<32"
       - "uvicorn>=0.32,<1"
+      - "psycopg2-binary>=2.9,<3"
 
 postgres:
   image: ankane/pgvector:v0.5.1
