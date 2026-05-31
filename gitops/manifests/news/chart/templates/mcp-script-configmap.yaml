@@ -115,7 +115,15 @@ data:
 
     _RELATIVE_RE = re.compile(r"^\s*(\d+)\s*([hdwmHDWM])\s*$")
 
-    def parse_since(value: Any) -> datetime | None:
+    # If the query window ends more than HISTORICAL_THRESHOLD ago, mark the
+    # response is_historical=True so callers know not to frame results as
+    # "recent news". 6 hours is enough lead to not flag last-night queries
+    # but short enough that "what happened last week" still gets flagged.
+    HISTORICAL_THRESHOLD = timedelta(hours=6)
+
+    def parse_when(value: Any, *, now: datetime | None = None) -> datetime | None:
+        """Accept None, ISO timestamp, or relative ('24h','7d','2w'). Relative
+        values are interpreted backward from `now` (or wall-clock now)."""
         if value is None or value == "":
             return None
         if isinstance(value, datetime):
@@ -123,6 +131,7 @@ data:
         s = str(value).strip()
         m = _RELATIVE_RE.match(s)
         if m:
+            base = now or datetime.now(timezone.utc)
             n = int(m.group(1))
             unit = m.group(2).lower()
             delta = {
@@ -131,11 +140,14 @@ data:
                 "w": timedelta(weeks=n),
                 "m": timedelta(days=30 * n),
             }[unit]
-            return datetime.now(timezone.utc) - delta
+            return base - delta
         try:
             return datetime.fromisoformat(s.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValueError(f"could not parse time '{value}': {exc}") from exc
+
+    # Back-compat alias for callers still using the old name.
+    parse_since = parse_when
 
     def _row_to_dict(cur, row) -> dict[str, Any]:
         result = {}
@@ -146,6 +158,28 @@ data:
                 result[col] = val
         return result
 
+    def _iso(dt: datetime | None) -> str | None:
+        return dt.isoformat() if dt else None
+
+    def _build_window(
+        since_dt: datetime | None,
+        until_dt: datetime | None,
+        as_of_dt: datetime | None,
+    ) -> dict[str, Any]:
+        """Return a {query_window, as_of, is_historical} block uniform across
+        search_articles and get_briefing. is_historical fires when either the
+        query window ends >HISTORICAL_THRESHOLD ago OR the caller supplied an
+        as_of cut-off that is >HISTORICAL_THRESHOLD in the past."""
+        now = datetime.now(timezone.utc)
+        as_of = as_of_dt or now
+        end = until_dt or as_of
+        is_historical = (now - end) > HISTORICAL_THRESHOLD
+        return {
+            "query_window": {"start": _iso(since_dt), "end": _iso(until_dt)},
+            "as_of": _iso(as_of),
+            "is_historical": is_historical,
+        }
+
     mcp = FastMCP(
         name="articles",
         instructions=(
@@ -153,7 +187,11 @@ data:
             "Use get_briefing for 'what's new' / morning briefing (no vector search, fast). "
             "Use search_articles for topic-based deep questions. "
             "Use get_article for the full body once a search has surfaced a hit. "
-            "mark_read and star mutate FreshRSS state — only call after explicit user confirmation."
+            "mark_read and star mutate FreshRSS state — only call after explicit user confirmation. "
+            "search_articles and get_briefing return a {query_window, as_of, is_historical, results} envelope; "
+            "when is_historical=true the articles are from the queried window, NOT the present — "
+            "refer to them by their published_at dates and avoid relative phrases like "
+            "'today', 'recently', or 'this week'."
         ),
         host=os.environ.get("FASTMCP_HOST", "0.0.0.0"),
         port=int(os.environ.get("FASTMCP_PORT", "8080")),
@@ -165,21 +203,41 @@ data:
         top_k: int = 10,
         since: str | None = None,
         until: str | None = None,
+        as_of: str | None = None,
         source: str | None = None,
         category: str | None = None,
         only_unread: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Semantic search across ingested articles via pgvector.
 
         Filters apply BEFORE the vector search. Returns the best chunk per
-        article, ranked by cosine similarity (1.0 = identical). The schema
-        has near-duplicate chunk collapse — the same chunk may be cited by
-        multiple articles; this query picks one representative article per
-        chunk via DISTINCT ON (chunk_id) but the chunk itself is shared.
+        article, ranked by cosine similarity (1.0 = identical).
+
+        Time params:
+          since / until: ISO timestamps OR relative ('24h','7d','2w'),
+            inclusive bounds on article published_at.
+          as_of:         optional reference point for is_historical detection;
+                         defaults to now(). Use when the user asked "as of
+                         March 31, what did the news say about X" — the
+                         response is flagged is_historical=true even if
+                         since/until aren't set.
+
+        Return shape:
+          {
+            query_window: {start, end},
+            as_of: <iso>,
+            is_historical: <bool>,   # true when window ended >6h ago
+            results: [ { id, title, url, summary, published_at, feed_title,
+                         category, read, starred, chunk_text, similarity } ]
+          }
+
+        When is_historical is true, the LLM MUST NOT frame results as "recent"
+        or "today" — reference articles by their published_at dates.
         """
         qv = embed(query)
-        since_dt = parse_since(since)
-        until_dt = parse_since(until)
+        since_dt = parse_when(since)
+        until_dt = parse_when(until)
+        as_of_dt = parse_when(as_of)
         source_like = f"%{source}%" if source else None
         sql = """
             WITH ranked AS (
@@ -219,18 +277,44 @@ data:
             with conn.cursor() as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
-                return [_row_to_dict(cur, r) for r in rows]
+                results = [_row_to_dict(cur, r) for r in rows]
+        envelope = _build_window(since_dt, until_dt, as_of_dt)
+        envelope["results"] = results
+        return envelope
 
     @mcp.tool()
     def get_briefing(
         since: str = "24h",
+        until: str | None = None,
+        as_of: str | None = None,
         source: str | None = None,
         category: str | None = None,
         only_unread: bool = False,
         limit: int = 20,
-    ) -> list[dict[str, Any]]:
-        """SQL-only newest-first feed of article summaries. No vector search."""
-        since_dt = parse_since(since)
+    ) -> dict[str, Any]:
+        """SQL-only newest-first feed of article summaries. No vector search.
+
+        Time params:
+          since: ISO timestamp OR relative ('24h','7d','2w'). Default '24h'.
+          until: optional upper bound — set both since AND until for a
+                 historical window like "what happened March 1–31, 2024".
+          as_of: optional reference point for is_historical detection.
+
+        Return shape:
+          {
+            query_window: {start, end},
+            as_of: <iso>,
+            is_historical: <bool>,   # true when window ended >6h ago
+            results: [ { id, title, url, summary, published_at, feed_title,
+                         category, read, starred } ]
+          }
+
+        When is_historical is true, the LLM MUST NOT frame results as "recent"
+        or "today" — reference articles by their published_at dates.
+        """
+        since_dt = parse_when(since)
+        until_dt = parse_when(until)
+        as_of_dt = parse_when(as_of)
         source_like = f"%{source}%" if source else None
         sql = """
             SELECT id, title, url, summary, published_at, feed_title, category, read, starred
@@ -238,18 +322,29 @@ data:
             WHERE extraction_status = 'ok'
               AND summary IS NOT NULL
               AND (%s::timestamptz IS NULL OR published_at >= %s::timestamptz)
+              AND (%s::timestamptz IS NULL OR published_at <= %s::timestamptz)
               AND (%s::text IS NULL OR feed_title ILIKE %s::text)
               AND (%s::text IS NULL OR category = %s::text)
               AND (%s::bool = false OR read = false)
             ORDER BY published_at DESC
             LIMIT %s
         """
-        params = (since_dt, since_dt, source, source_like, category, category, only_unread, limit)
+        params = (
+            since_dt, since_dt,
+            until_dt, until_dt,
+            source, source_like,
+            category, category,
+            only_unread,
+            limit,
+        )
         with pg_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
-                return [_row_to_dict(cur, r) for r in rows]
+                results = [_row_to_dict(cur, r) for r in rows]
+        envelope = _build_window(since_dt, until_dt, as_of_dt)
+        envelope["results"] = results
+        return envelope
 
     @mcp.tool()
     def get_article(id: str) -> dict[str, Any]:
