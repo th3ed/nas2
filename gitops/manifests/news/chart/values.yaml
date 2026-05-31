@@ -84,12 +84,13 @@ mcp:
 
 ui:
   enabled: true
-  # Tailscale Operator-provisioned Ingress host. The `news-ui` and short
-  # `news` names both failed cert issuance with a `SetDNS 500: failed to
-  # create DNS record` from the Tailscale coordination server (cause not
-  # determined — may be a rate-limit or hostname-conflict at the tailnet
-  # control plane). `newsdash` is the working alternative.
-  hostname: newsdash.taile9c9c.ts.net
+  # Tailscale Operator-provisioned Ingress host. Earlier `news` and
+  # `news-ui` attempts failed with `SetDNS 500: failed to create DNS
+  # record` from the Tailscale coordination server — cause unidentified
+  # (tailnet-side state stuck on the failed registrations is the leading
+  # theory). Single-word hostnames work; the historical `newsdash` first
+  # cleared the path, now using `newsrag` per the user's preference.
+  hostname: newsrag.taile9c9c.ts.net
   # When true, the dashboard exposes a "Run ingest now" button that creates
   # a one-shot Job from news-ingest. Backed by a Role granting jobs.create
   # in the news namespace. Set false to ship a read-only dashboard.
