@@ -1,12 +1,12 @@
 ---
 # Sister Ingress exposing the Hermes Dashboard UI (port 9119) at
-# https://hermes-ui.taile9c9c.ts.net. The /v1 OpenAI API stays on the
+# https://hermes-dashboard.taile9c9c.ts.net. The /v1 OpenAI API stays on the
 # primary hermes.taile9c9c.ts.net Ingress. Both routes share the same
 # pod; the Service's named ports decide which container port to hit.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: hermes-ui
+  name: hermes-dashboard
   namespace: hermes
   annotations:
     tailscale.com/http-redirect: "true"
@@ -19,4 +19,4 @@ spec:
         name: dashboard
   tls:
     - hosts:
-        - hermes-ui
+        - hermes-dashboard

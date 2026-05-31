@@ -42,6 +42,54 @@ if [[ "$tls_host" != "hermes" ]]; then
 fi
 pass "$TITLE"
 
+TITLE="hermes: dashboard Ingress renamed to hermes-dashboard"
+dash_host=$(ssh_kubectl "get ingress hermes-dashboard -n hermes -o jsonpath='{.spec.tls[0].hosts[0]}'") || {
+    fail "$TITLE: kubectl failed (ingress hermes-dashboard not found)"
+    exit 1
+}
+if [[ "$dash_host" != "hermes-dashboard" ]]; then
+    fail "$TITLE: tls host=$dash_host (expected hermes-dashboard)"
+    exit 1
+fi
+pass "$TITLE"
+
+TITLE="hermes-webui: pod running"
+webui_phase=$(ssh_kubectl "get pods -n hermes -l app.kubernetes.io/name=hermes-webui -o jsonpath='{.items[0].status.phase}'") || {
+    fail "$TITLE: kubectl failed"
+    exit 1
+}
+if [[ "$webui_phase" != "Running" ]]; then
+    fail "$TITLE: phase=$webui_phase"
+    exit 1
+fi
+pass "$TITLE"
+
+TITLE="hermes-webui: Ingress has tailscale class and TLS host hermes-ui"
+webui_json=$(ssh_kubectl "get ingress hermes-webui -n hermes -o jsonpath='{.spec.ingressClassName} {.spec.tls[0].hosts[0]}'") || {
+    fail "$TITLE: kubectl failed"
+    exit 1
+}
+read -r webui_class webui_host <<< "$webui_json"
+if [[ "$webui_class" != "tailscale" ]]; then
+    fail "$TITLE: ingressClassName=$webui_class (expected tailscale)"
+    exit 1
+fi
+if [[ "$webui_host" != "hermes-ui" ]]; then
+    fail "$TITLE: tls host=$webui_host (expected hermes-ui)"
+    exit 1
+fi
+pass "$TITLE"
+
+TITLE="hermes-webui: /health returns 200"
+code=$(curl -sk --max-time 15 -o /dev/null -w '%{http_code}' \
+    https://hermes-ui.taile9c9c.ts.net/health 2>/dev/null || echo "000")
+if [[ "$code" == "200" ]]; then
+    pass "$TITLE (HTTP $code)"
+else
+    fail "$TITLE (HTTP $code, expected 200)"
+    exit 1
+fi
+
 # Gateway is reachable over HTTPS via Tailscale Ingress. Hit /v1/models
 # without auth — Hermes's OpenAI-compatible API server requires
 # API_SERVER_KEY and returns 401, which proves both the Tailscale proxy
