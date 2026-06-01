@@ -35,6 +35,11 @@ spec:
               value: "0.0.0.0"
             - name: HERMES_WEBUI_PORT
               value: "8787"
+            - name: HERMES_WEBUI_STATE_DIR
+              value: /state
+          volumeMounts:
+            - name: state
+              mountPath: /state
           livenessProbe:
             httpGet:
               path: /health
@@ -47,3 +52,6 @@ spec:
               port: 8787
             initialDelaySeconds: 5
             periodSeconds: 10
+      volumes:
+        - name: state
+          emptyDir: {}
