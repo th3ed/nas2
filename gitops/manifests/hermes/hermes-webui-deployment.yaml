@@ -39,9 +39,19 @@ spec:
               value: /state
             - name: HERMES_WEBUI_SKIP_ONBOARDING
               value: "1"
+            # Point HERMES_HOME at a writable path inside /state. The default
+            # (~/.hermes → /home/hermeswebui/.hermes) is recursively chown'd by
+            # the entrypoint's init script, which fails when a read-only
+            # ConfigMap file is mounted underneath it.
+            - name: HERMES_HOME
+              value: /state/.hermes
           volumeMounts:
             - name: state
               mountPath: /state
+            - name: hermes-home-config
+              mountPath: /state/.hermes/config.yaml
+              subPath: config.yaml
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /health
@@ -57,3 +67,9 @@ spec:
       volumes:
         - name: state
           emptyDir: {}
+        - name: hermes-home-config
+          configMap:
+            name: hermes-webui-config
+            items:
+              - key: config.yaml
+                path: config.yaml

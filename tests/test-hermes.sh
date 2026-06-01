@@ -104,6 +104,46 @@ else
     exit 1
 fi
 
+# Without a HERMES_HOME/config.yaml in the webui pod, /api/models returns
+# {active_provider:null, groups:[]} — the model picker is empty and the
+# chat surface can't dispatch. The hermes-webui-config ConfigMap mounts
+# a config.yaml at /home/hermeswebui/.hermes/config.yaml so the picker
+# advertises the hermes-agent model from the gateway's /v1/models.
+TITLE="hermes-webui: /api/models advertises the hermes-agent model"
+models_json=$(ssh_kubectl "exec -n hermes deploy/hermes-webui -- sh -c 'curl -sS http://127.0.0.1:8787/api/models'" 2>&1) || {
+    fail "$TITLE: curl from inside pod failed"
+    exit 1
+}
+if echo "$models_json" | grep -q '"id": "hermes-agent"'; then
+    pass "$TITLE"
+else
+    fail "$TITLE: /api/models did not include hermes-agent: $(echo "$models_json" | head -c 200)"
+    exit 1
+fi
+
+# End-to-end chat round-trip: create a session, start a turn, drain the
+# SSE stream, and assert we got a 'done' event with an assistant message.
+# This is the closest thing to "the user clicked send" we can express
+# from a shell script — if it works, the whole chat path (UI → gateway →
+# hermes API → LiteLLM → Ollama → back) is wired correctly.
+TITLE="hermes-webui: end-to-end chat round-trip via gateway"
+chat_result=$(ssh_kubectl "exec -n hermes deploy/hermes-webui -- sh -c '
+set -e
+SID=\$(curl -sS -X POST -H \"Content-Type: application/json\" -d \"{}\" http://127.0.0.1:8787/api/session/new | python3 -c \"import json,sys; print(json.load(sys.stdin)[\\\"session\\\"][\\\"session_id\\\"])\")
+START=\$(curl -sS -X POST -H \"Content-Type: application/json\" -d \"{\\\"session_id\\\":\\\"\$SID\\\",\\\"message\\\":\\\"say hi\\\",\\\"model\\\":\\\"hermes-agent\\\",\\\"model_provider\\\":\\\"custom\\\"}\" http://127.0.0.1:8787/api/chat/start)
+STREAM_ID=\$(echo \"\$START\" | python3 -c \"import json,sys; print(json.load(sys.stdin)[\\\"stream_id\\\"])\")
+curl -sS --max-time 120 \"http://127.0.0.1:8787/api/chat/stream?session_id=\$SID&stream_id=\$STREAM_ID\"
+'" 2>&1) || {
+    fail "$TITLE: round-trip pipeline returned non-zero"
+    exit 1
+}
+if echo "$chat_result" | grep -q '^event: done$'; then
+    pass "$TITLE"
+else
+    fail "$TITLE: no 'done' event in stream: $(echo "$chat_result" | head -c 300)"
+    exit 1
+fi
+
 # Gateway is reachable over HTTPS via Tailscale Ingress. Hit /v1/models
 # without auth — Hermes's OpenAI-compatible API server requires
 # API_SERVER_KEY and returns 401, which proves both the Tailscale proxy
