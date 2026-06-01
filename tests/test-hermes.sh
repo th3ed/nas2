@@ -90,6 +90,20 @@ else
     exit 1
 fi
 
+# Upstream nesquena/hermes-webui docs/onboarding.md documents
+# HERMES_WEBUI_SKIP_ONBOARDING=1 as the bypass for the first-run wizard.
+# Without it, the UI boots into a setup page that flags the in-process
+# `from run_agent import AIAgent` check as a failure — which is irrelevant
+# for our gateway-mode deployment but blocks the chat surface.
+TITLE="hermes-webui: onboarding wizard is bypassed"
+skip=$(ssh_kubectl "get deploy hermes-webui -n hermes -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name==\"HERMES_WEBUI_SKIP_ONBOARDING\")].value}'")
+if [[ "$skip" == "1" ]]; then
+    pass "$TITLE"
+else
+    fail "$TITLE: HERMES_WEBUI_SKIP_ONBOARDING=$skip (expected 1)"
+    exit 1
+fi
+
 # Gateway is reachable over HTTPS via Tailscale Ingress. Hit /v1/models
 # without auth — Hermes's OpenAI-compatible API server requires
 # API_SERVER_KEY and returns 401, which proves both the Tailscale proxy

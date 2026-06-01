@@ -37,6 +37,8 @@ spec:
               value: "8787"
             - name: HERMES_WEBUI_STATE_DIR
               value: /state
+            - name: HERMES_WEBUI_SKIP_ONBOARDING
+              value: "1"
           volumeMounts:
             - name: state
               mountPath: /state
