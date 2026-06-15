@@ -85,7 +85,9 @@ fi
 # alive AND the auth gate is enforced. We curl from inside the pod because there
 # is intentionally no external Ingress for the API.
 TITLE="hermes: in-cluster API returns 401 unauthenticated on /v1/models"
-api_code=$(ssh_kubectl "exec -n hermes deploy/hermes -- sh -c 'curl -s -o /dev/null -w %{http_code} --max-time 15 http://127.0.0.1:8642/v1/models'" 2>&1)
+# -c hermes avoids the "Defaulted container ..." stderr line (the pod has init
+# containers) contaminating the captured HTTP code.
+api_code=$(ssh_kubectl "exec -n hermes -c hermes deploy/hermes -- sh -c 'curl -s -o /dev/null -w %{http_code} --max-time 15 http://127.0.0.1:8642/v1/models'" 2>&1)
 if [[ "$api_code" == "401" ]]; then
     pass "$TITLE (HTTP $api_code)"
 else
