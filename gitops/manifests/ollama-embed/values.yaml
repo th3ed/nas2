@@ -1,0 +1,54 @@
+---
+# CPU-only Ollama for embeddings. Deliberately NO runtimeClassName: nvidia and
+# NO nvidia.com/gpu resource — this instance must never land on the GPU so the
+# RTX stays reserved for the Qwen3.5 chat model in gitops/manifests/ollama.
+image:
+  repository: ollama/ollama
+  tag: "0.30.8"
+  pullPolicy: IfNotPresent
+
+ollama:
+  gpu:
+    enabled: false
+  models:
+    pull:
+      # 768-dim, ~600 MB resident; the text-embedding-3-small LiteLLM alias
+      # (gitops/manifests/litellm/values.yaml) routes here. Consumers: mem0
+      # and news ingest.
+      - nomic-embed-text
+    run: []
+
+# Pin to nas2: mem0 and news (the embedding consumers) are pinned there too via
+# the cross-node DNS gotcha (see CLAUDE.md). Keeping the embedder co-located
+# avoids any cross-node hop.
+nodeSelector:
+  kubernetes.io/hostname: nas2
+
+# Small PVC just for the embedding model so it survives pod restarts without a
+# re-pull. nomic-embed-text is well under 1 GB.
+persistentVolume:
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    memory: 2Gi
+
+service:
+  type: ClusterIP
+  port: 11434
+
+extraEnv:
+  # Keep nomic resident so the first embedding call after an idle gap doesn't
+  # pay a cold load. Default keep_alive is 5m.
+  - name: OLLAMA_KEEP_ALIVE
+    value: "24h"
+
+replicaCount: 1
+updateStrategy:
+  type: Recreate

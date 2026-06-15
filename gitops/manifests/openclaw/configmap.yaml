@@ -78,39 +78,18 @@ data:
             api: "openai-completions",
             models: [
               {
-                id: "gemma4:e4b",
-                name: "Gemma 4 E4B",
-                // reasoning: true broke tool calls. Ollama's OpenAI-compatible
-                // streaming sends ~100 delta.reasoning chunks before the final
-                // delta.tool_calls chunk; openclaw's reasoning-mode handler
-                // misses the tool_calls. Reverting to false restores tools.
-                // Re-enable when openclaw fixes reasoning + tool call streaming.
+                id: "qwen3.5:9b",
+                name: "Qwen 3.5 9B",
+                // reasoning: false — Ollama's OpenAI-compatible streaming sends
+                // delta.reasoning chunks before the terminal delta.tool_calls
+                // chunk; openclaw's reasoning-mode handler misses the
+                // tool_calls. Keep false until openclaw fixes reasoning + tool
+                // call streaming.
                 reasoning: false,
                 input: ["text"],
                 cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                // Full native window per `ollama show`. With OLLAMA_CONTEXT_LENGTH
-                // raised to match, OpenClaw stops triggering compaction every
-                // 2-3 turns.
                 contextWindow: 131072,
                 maxTokens: 16384,
-              },
-              {
-                id: "qwen3-coder-next:latest",
-                name: "Qwen 3 Coder (Next)",
-                reasoning: false,
-                input: ["text"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 32768,
-                maxTokens: 8192,
-              },
-              {
-                id: "qwen3:4b-instruct-2507-q8_0",
-                name: "Qwen 3 4B Instruct (2507, Q8)",
-                reasoning: false,
-                input: ["text"],
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                contextWindow: 32768,
-                maxTokens: 8192,
               },
               // OpenRouter-backed cloud models exposed by LiteLLM. LiteLLM
               // strips PII before the request leaves the tailnet and restores
@@ -218,10 +197,10 @@ data:
           //     when the user uploads media (explicit action, not
           //     passive); no local model in our catalog supports vision,
           //     and openclaw errors with "no image model configured" if
-          //     they're unset. Haiku is the cheapest vision-capable
-          //     Anthropic model; Sonnet is the PDF default for quality.
+          //     they're unset. Routed to the free Gemini tier rather than
+          //     paid Claude (which stays explicit-approval-only).
           model: {
-            primary: "litellm/gemma4:e4b",
+            primary: "litellm/qwen3.5:9b",
           },
           heartbeat: {
             // Fresh isolated session + lightweight context so the model only
@@ -231,26 +210,26 @@ data:
             lightContext: true,
           },
           imageModel: {
-            primary: "litellm/claude-haiku-4.5",
+            primary: "litellm/gemini-2.5-flash",
           },
           pdfModel: {
-            primary: "litellm/claude-sonnet-4.6",
+            primary: "litellm/gemini-2.5-pro",
           },
           // Allowlist: only these keys appear in the UI model picker.
           // models.mode="replace" restricts CLI but has a known bug where
           // the Control UI dropdown still shows the full built-in catalog.
           // agents.defaults.models is the workaround that actually gates the UI.
           models: {
-            "litellm/gemma4:e4b": {},
-            "litellm/qwen3-coder-next:latest": {},
-            "litellm/qwen3:4b-instruct-2507-q8_0": {},
-            "litellm/claude-opus-4.7": {},
-            "litellm/claude-sonnet-4.6": {},
-            "litellm/claude-haiku-4.5": {},
+            "litellm/qwen3.5:9b": {},
+            "litellm/deepseek-v4-pro": {},
+            "litellm/deepseek-v4-flash": {},
             "litellm/kimi-k2.6": {},
             "litellm/gemini-2.5-flash": {},
             "litellm/gemini-2.5-pro": {},
             "litellm/gemini-2.0-flash": {},
+            "litellm/claude-opus-4.7": {},
+            "litellm/claude-sonnet-4.6": {},
+            "litellm/claude-haiku-4.5": {},
           },
         },
       },

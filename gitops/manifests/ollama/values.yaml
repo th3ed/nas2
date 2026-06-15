@@ -3,7 +3,7 @@ runtimeClassName: nvidia
 
 image:
   repository: ollama/ollama
-  tag: "0.23.2"
+  tag: "0.30.8"
   pullPolicy: IfNotPresent
 
 ollama:
@@ -13,9 +13,12 @@ ollama:
     number: 1
   models:
     pull:
-      - qwen3-coder-next:latest
-      - gemma4:e4b
-      - qwen3:4b-instruct-2507-q8_0
+      # Single GPU-resident chat model. Qwen3.5 9B Unsloth Dynamic 2.0
+      # (Q4_K_XL ≈ Q5/Q6 quality, ~6 GB) with native tool-calling. Embeddings
+      # moved to the CPU-only ollama-embed release, so the full ~10 GB RTX is
+      # available for weights + KV cache. Gated DeltaNet (linear attn in 75% of
+      # layers) keeps the KV cache small even at 128K context.
+      - isotnek/qwen3.5:9B-Unsloth-UD-Q4_K_XL
     run: []
 
 persistentVolume:
@@ -37,14 +40,14 @@ extraEnv:
   # var in ollama >=0.6. Without this set correctly, ollama loads every model with
   # the 4096-token default and silently truncates longer prompts.
   #
-  # gemma4:e4b reports `context length 131072` in `ollama show`, so use the
-  # full window. With OpenClaw's ~18K-token agent prompt floor this leaves
-  # ~110K tokens of conversation room before OpenClaw triggers compaction —
-  # at 32K we were compacting every 2-3 turns.
+  # Qwen3.5 9B supports a 256K window; we cap at 131072 which is plenty for the
+  # agent prompt floor (~18K) plus long conversations. Gated DeltaNet keeps the
+  # KV cache small, so this fits comfortably alongside the ~6 GB of weights on
+  # the 10 GB GPU now that embeddings live on the CPU instance.
   - name: OLLAMA_CONTEXT_LENGTH
     value: "131072"
-  # Keep gemma4 (and qwen3-coder) resident across idle gaps so a fresh chat turn
-  # doesn't pay a 5-second cold-load. Default keep_alive is 5m.
+  # Keep the chat model resident across idle gaps so a fresh chat turn doesn't
+  # pay a multi-second cold-load. Default keep_alive is 5m.
   - name: OLLAMA_KEEP_ALIVE
     value: "24h"
   # Flash attention is required for KV cache quantization. Setting it

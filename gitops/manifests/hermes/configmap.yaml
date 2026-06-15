@@ -22,34 +22,40 @@ metadata:
 data:
   config.yaml: |
     # Main model — used for the primary agent loop and Telegram conversations.
-    # Sonnet 4.6 is the default; users can switch per-session via the CLI/API.
+    # Local-first: the free Qwen3.5 9B handles routine turns; users can switch
+    # per-session via the CLI/API. Frontier Claude models are listed in the
+    # picker below but are never an automatic slot (explicit-approval only).
     model:
       provider: custom
-      model: "gemma4:e4b"
+      model: "qwen3.5:9b"
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
       context_length: 131072
 
-    # Cheap fallback if the primary errors / rate-limits.
+    # Auto-fallback when the local model errors / rate-limits. DeepSeek V4 Pro
+    # is a cheap-but-capable cloud model ($0.435/$0.87 per 1M) for complex
+    # turns the local model can't complete — deliberately NOT Claude, which
+    # stays explicit-approval-only.
     fallback_model:
       provider: custom
-      model: claude-haiku-4.5
+      model: deepseek-v4-pro
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
 
-    # Vision-capable model for image inputs. Haiku is the cheapest Anthropic
-    # vision option; local Ollama models in our catalog are text-only.
+    # Vision-capable model for image inputs. Local Qwen3.5 in our catalog is
+    # text-only, so route to free Gemini 2.5 Flash (vision-capable, $0) rather
+    # than paid Claude — keeps vision off the explicit-Claude budget.
     auxiliary:
       vision:
         provider: custom
-        model: claude-haiku-4.5
+        model: gemini-2.5-flash
         base_url: http://litellm.litellm:4000/v1
         api_key: ${LITELLM_API_KEY}
       # Context compression runs frequently on long sessions — route to the
-      # free local Gemma model to avoid spend on summarization.
+      # free local Qwen3.5 model to avoid spend on summarization.
       compression:
         provider: custom
-        model: gemma4:e4b
+        model: qwen3.5:9b
         base_url: http://litellm.litellm:4000/v1
         api_key: ${LITELLM_API_KEY}
 
@@ -66,19 +72,25 @@ data:
       - name: "LiteLLM"
         base_url: http://litellm.litellm:4000/v1
         api_key: ${LITELLM_API_KEY}
-        model: "gemma4:e4b"
+        model: "qwen3.5:9b"
         models:
-          - "gemma4:e4b"
-          - "qwen3-coder-next:latest"
-          - "qwen3:4b-instruct-2507-q8_0"
-          - "claude-opus-4.7"
-          - "claude-sonnet-4.6"
-          - "claude-haiku-4.5"
+          # Local (free).
+          - "qwen3.5:9b"
+          # Cheap cloud — selectable for complex turns; deepseek-v4-pro is also
+          # the automatic error-fallback.
+          - "deepseek-v4-pro"
+          - "deepseek-v4-flash"
           - "kimi-k2.6"
           - "glm-5.1"
+          # Free Gemini tier.
           - "gemini-2.5-flash"
           - "gemini-2.5-pro"
           - "gemini-2.0-flash"
+          # Frontier Claude — selectable per-session = explicit approval. Never
+          # an automatic slot (main/fallback/vision/compression all avoid them).
+          - "claude-opus-4.7"
+          - "claude-sonnet-4.6"
+          - "claude-haiku-4.5"
 
     # Prune the upstream-bundled skill set. Hermes ships ~82 skills in its
     # image (skills/<category>/<name>/SKILL.md) and auto-indexes every one

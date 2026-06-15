@@ -6,7 +6,7 @@
 #      underlying tool, then search it back (proves Mem0 + pgvector +
 #      LiteLLM-embeddings wiring all work together)
 #
-# Free tier — no paid models touched. Uses gemma4:e4b for LLM
+# Free tier — no paid models touched. Uses qwen3.5:9b for LLM
 # extraction and ollama/nomic-embed-text for embeddings, both via
 # LiteLLM.
 set -uo pipefail
@@ -75,7 +75,7 @@ config = {
     "llm": {
         "provider": "openai",
         "config": {
-            "model": os.environ.get("MEM0_LLM_MODEL", "gemma4:e4b"),
+            "model": os.environ.get("MEM0_LLM_MODEL", "qwen3.5:9b"),
             "openai_base_url": os.environ["LITELLM_BASE_URL"],
             "api_key": os.environ["LITELLM_API_KEY"],
         },

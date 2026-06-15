@@ -1,3 +1,10 @@
+---
+# Exposes the built-in Hermes Dashboard UI (container port 9119, Service named
+# port `dashboard`) at https://hermes.taile9c9c.ts.net — the single friendly
+# entry point for the homelab assistant. The OpenAI-compatible API (Service
+# named port `http`/8642) is in-cluster only (hermes.hermes:80); there is no
+# external API Ingress. The tailnet is the auth boundary (the dashboard has no
+# built-in auth).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -11,7 +18,7 @@ spec:
     service:
       name: hermes
       port:
-        number: 80
+        name: dashboard
   tls:
     - hosts:
         - hermes

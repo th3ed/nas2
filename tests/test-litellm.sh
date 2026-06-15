@@ -18,9 +18,8 @@ pass "$TITLE"
 TITLE="litellm: /v1/models returns expected models"
 
 EXPECTED_MODELS=(
-    "gemma4:e4b"
-    "qwen3-coder-next:latest"
-    "qwen3:4b-instruct-2507-q8_0"
+    "qwen3.5:9b"
+    "text-embedding-3-small"
     "claude-opus-4.7"
     "claude-sonnet-4.6"
     "claude-haiku-4.5"
@@ -55,6 +54,36 @@ if [[ ${#missing[@]} -gt 0 ]]; then
 fi
 
 pass "$TITLE: all ${#EXPECTED_MODELS[@]} models present"
+
+# Native tool-calling on the local Qwen3.5 model. This is the regression guard
+# for the gemma4 -> qwen3.5 swap: gemma needed a role:tool rewrite hook and
+# silently looped; qwen3.5 must emit a real tool_call through ollama_chat with
+# no callback. Free (local model only). Generous timeout for a cold model load.
+TITLE="litellm: qwen3.5:9b emits a native tool_call (no enforcement loop)"
+toolcall_resp=$(curl -fsSk --max-time 120 \
+    -H "Authorization: Bearer ${LITELLM_KEY}" \
+    -H "Content-Type: application/json" \
+    -X POST https://litellm.taile9c9c.ts.net/v1/chat/completions \
+    -d '{
+      "model": "qwen3.5:9b",
+      "messages": [{"role": "user", "content": "What is the weather in Paris right now? Use the tool."}],
+      "tools": [{"type": "function", "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city",
+        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}
+      }}],
+      "tool_choice": "auto",
+      "max_tokens": 256
+    }' 2>&1) || {
+    fail "$TITLE: HTTP request failed: $(echo "$toolcall_resp" | head -c 200)"
+    exit 1
+}
+if echo "$toolcall_resp" | grep -q '"get_weather"' && echo "$toolcall_resp" | grep -q 'tool_calls'; then
+    pass "$TITLE"
+else
+    fail "$TITLE: no get_weather tool_call in response: $(echo "$toolcall_resp" | head -c 300)"
+    exit 1
+fi
 
 # PERSON is spaCy-NER based and false-flags technical tokens ("gemma",
 # "Email", service hostnames, SCREAMING_SNAKE identifiers) at the same

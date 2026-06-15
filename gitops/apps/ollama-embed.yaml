@@ -1,0 +1,43 @@
+---
+# Dedicated CPU-only Ollama serving the embedding model (nomic-embed-text).
+# Split out from the GPU Ollama (gitops/apps/ollama.yaml) so the ~10 GB RTX is
+# single-tenant for the chat model (Qwen3.5 9B) while embeddings stay always-on
+# on the CPU. Embedding volume here (news ingest + mem0) is low, so CPU latency
+# is fine. Same otwld chart, separate Helm release in the same namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ollama-embed
+  namespace: argocd
+  annotations:
+    # Up before mem0 (wave 15) and news consumers so the embedding endpoint
+    # exists when they first reconcile.
+    argocd.argoproj.io/sync-wave: "10"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://otwld.github.io/ollama-helm/
+      chart: ollama
+      targetRevision: 1.56.0
+      helm:
+        releaseName: ollama-embed
+        valueFiles:
+          - $values/gitops/manifests/ollama-embed/values.yaml
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/th3ed/nas2.git
+      targetRevision: main
+      path: gitops/manifests/ollama-embed
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ollama
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

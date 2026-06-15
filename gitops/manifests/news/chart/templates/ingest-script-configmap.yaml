@@ -61,7 +61,7 @@ data:
     LITELLM_BASE = os.environ["LITELLM_BASE_URL"].rstrip("/")
     LITELLM_KEY = os.environ["LITELLM_API_KEY"]
     MODEL_EMBEDDING = os.environ.get("MODEL_EMBEDDING", "text-embedding-3-small")
-    MODEL_SUMMARY = os.environ.get("MODEL_SUMMARY", "qwen3:4b-instruct-2507-q8_0")
+    MODEL_SUMMARY = os.environ.get("MODEL_SUMMARY", "qwen3.5:9b")
     FRESHRSS_URL = os.environ["FRESHRSS_URL"].rstrip("/")
     FRESHRSS_USER = os.environ["FRESHRSS_USER"]
     FRESHRSS_PW = os.environ["FRESHRSS_API_PASSWORD"]
@@ -233,6 +233,12 @@ data:
                 "model": MODEL_SUMMARY,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 2000,
+                # Qwen3.5 is a thinking model; disable CoT for batch
+                # summarization so the token budget goes to the answer, not the
+                # reasoning trace (same class of bug as the old gemma4
+                # reasoning_content gotcha). `think` is Ollama-native and passes
+                # through LiteLLM's ollama_chat provider.
+                "think": False,
             },
             timeout=600,
         )

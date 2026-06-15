@@ -76,7 +76,7 @@ spec:
             - name: LITELLM_BASE_URL
               value: http://litellm.litellm:4000/v1
             - name: MEM0_LLM_MODEL
-              value: gemma4:e4b
+              value: qwen3.5:9b
             - name: MEM0_EMBED_MODEL
               value: text-embedding-3-small
             - name: MEM0_EMBED_DIMS

@@ -53,33 +53,13 @@ spec:
                     "apiKey": "LITELLM_API_KEY",
                     "models": [
                       {
-                        "id": "gemma4:e4b",
-                        "name": "Gemma 4 E4B",
+                        "id": "qwen3.5:9b",
+                        "name": "Qwen 3.5 9B",
                         "reasoning": false,
                         "input": ["text"],
                         "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
                         "contextWindow": 131072,
                         "maxTokens": 16384,
-                        "api": "openai-completions"
-                      },
-                      {
-                        "id": "qwen3-coder-next:latest",
-                        "name": "Qwen 3 Coder (Next)",
-                        "reasoning": false,
-                        "input": ["text"],
-                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                        "contextWindow": 32768,
-                        "maxTokens": 8192,
-                        "api": "openai-completions"
-                      },
-                      {
-                        "id": "qwen3:4b-instruct-2507-q8_0",
-                        "name": "Qwen 3 4B Instruct (2507, Q8)",
-                        "reasoning": false,
-                        "input": ["text"],
-                        "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                        "contextWindow": 32768,
-                        "maxTokens": 8192,
                         "api": "openai-completions"
                       },
                       {

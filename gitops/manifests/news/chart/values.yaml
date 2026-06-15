@@ -54,7 +54,7 @@ litellm:
   baseUrl: http://litellm.litellm:4000/v1
   embedModel: text-embedding-3-small
   embedDim: 768
-  summarizeModel: qwen3:4b-instruct-2507-q8_0
+  summarizeModel: qwen3.5:9b
 
 ingest:
   enabled: true

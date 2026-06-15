@@ -121,31 +121,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-        - name: patch-prompt-builder
-          # Same digest as the main container — ensures we copy and patch the
-          # correct version of prompt_builder.py. Update both image fields
-          # atomically when upgrading hermes-agent.
-          image: nousresearch/hermes-agent@sha256:b6e41c155d6bfce5ad83c5d0fec670086db8a43250e4511c9474134be5482d33
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              cp /opt/hermes/agent/prompt_builder.py /patch/prompt_builder.py
-              # TOOL_USE_ENFORCEMENT_MODELS (prompt_builder.py ~line 271) does a
-              # substring match: any model whose name contains "gemma" gets ~3500
-              # tokens of OpenAI XML tool-enforcement guidance injected. This
-              # guidance is designed for GPT/Gemini-style models and structurally
-              # conflicts with Gemma-4's native tool-calling format, causing
-              # finish_reason=stop on every agent turn instead of tool_calls.
-              # Remove "gemma" from the tuple so native tool-calling is used.
-              # Remove this init container when upstream adds a config flag or
-              # properly handles non-OpenAI models in the enforcement list.
-              # Ref: nousresearch/hermes-agent prompt_builder.py ~line 271
-              sed -i 's/, "gemma"//g' /patch/prompt_builder.py
-          volumeMounts:
-            - name: prompt-builder-patch
-              mountPath: /patch
-          securityContext:
-            runAsUser: 0
       containers:
         - name: hermes
           image: nousresearch/hermes-agent@sha256:b6e41c155d6bfce5ad83c5d0fec670086db8a43250e4511c9474134be5482d33
@@ -170,9 +145,9 @@ spec:
             - name: API_SERVER_HOST
               value: "0.0.0.0"
             # Browser-accessible Dashboard UI on port 9119. TUI=1 adds the
-            # in-browser Chat tab. Exposed via a sister Tailscale Ingress
-            # (hermes-ui.taile9c9c.ts.net) — the tailnet is the auth boundary;
-            # the dashboard itself has no built-in auth.
+            # in-browser Chat tab. Exposed via the Tailscale Ingress at
+            # hermes.taile9c9c.ts.net (tailscale-ingress.yaml) — the tailnet is
+            # the auth boundary; the dashboard itself has no built-in auth.
             - name: HERMES_DASHBOARD
               value: "1"
             - name: HERMES_DASHBOARD_HOST
@@ -194,10 +169,6 @@ spec:
               mountPath: /opt/data/config.yaml
               subPath: config.yaml
               readOnly: true
-            - name: prompt-builder-patch
-              mountPath: /opt/hermes/agent/prompt_builder.py
-              subPath: prompt_builder.py
-              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -205,5 +176,3 @@ spec:
         - name: app-config
           configMap:
             name: hermes-app-config
-        - name: prompt-builder-patch
-          emptyDir: {}

@@ -24,38 +24,20 @@ envVars:
 volumes:
   - name: prometheus-multiproc
     emptyDir: {}
-  # See callbacks-configmap.yaml. LiteLLM resolves callback modules
-  # relative to the config file's directory via
-  # importlib.util.spec_from_file_location — not sys.path. Config is
-  # mounted at /etc/litellm/config.yaml, so the callback must live at
-  # /etc/litellm/gemma_tool_rewrite.py. See
-  # /usr/lib/python3.13/site-packages/litellm/proxy/types_utils/utils.py
-  # (get_instance_fn).
-  - name: callbacks
-    configMap:
-      name: litellm-callbacks
 
 volumeMounts:
   - name: prometheus-multiproc
     mountPath: /tmp/prometheus_multiproc
-  - name: callbacks
-    mountPath: /etc/litellm/gemma_tool_rewrite.py
-    subPath: gemma_tool_rewrite.py
-    readOnly: true
 
 proxy_config:
   model_list:
-    - model_name: "gemma4:e4b"
+    # Single local chat model on the GPU Ollama (gitops/manifests/ollama).
+    # Qwen3.5 9B (Unsloth Dynamic 2.0 Q4_K_XL): native tool-calling, 256K
+    # context, replaces gemma4:e4b + the two dropped qwen3 models. ollama_chat
+    # gives proper role:tool handling — no pre_call rewrite hook needed.
+    - model_name: "qwen3.5:9b"
       litellm_params:
-        model: "ollama_chat/gemma4:e4b"
-        api_base: "http://ollama.ollama:11434"
-    - model_name: "qwen3-coder-next:latest"
-      litellm_params:
-        model: "ollama_chat/qwen3-coder-next:latest"
-        api_base: "http://ollama.ollama:11434"
-    - model_name: "qwen3:4b-instruct-2507-q8_0"
-      litellm_params:
-        model: "ollama_chat/qwen3:4b-instruct-2507-q8_0"
+        model: "ollama_chat/isotnek/qwen3.5:9B-Unsloth-UD-Q4_K_XL"
         api_base: "http://ollama.ollama:11434"
     # Embedding alias. Mem0's server bundles only openai/gemini as
     # embedder providers and rejects `provider: ollama` at config
@@ -67,7 +49,10 @@ proxy_config:
     - model_name: "text-embedding-3-small"
       litellm_params:
         model: "ollama/nomic-embed-text"
-        api_base: "http://ollama.ollama:11434"
+        # Dedicated CPU-only Ollama (gitops/apps/ollama-embed.yaml) — keeps the
+        # GPU single-tenant for the chat model. 768-dim; MEM0_EMBED_DIMS and the
+        # news embedDim must match.
+        api_base: "http://ollama-embed.ollama:11434"
     # bge-m3 (1024-dim) was added here for news-rag but rolled back —
     # see gitops/manifests/news-rag/postgres-init-configmap.yaml: the
     # nas2 RTX (10 GB) can't fit bge-m3's 8192-token batch alongside
@@ -152,11 +137,10 @@ proxy_config:
           PHONE_NUMBER: "MASK"
           IBAN_CODE: "MASK"
   litellm_settings:
-    # gemma_tool_rewrite.handler: pre_call_hook that rewrites role:tool ->
-    # role:user for ollama gemma models (gemma's chat renderer silently
-    # drops role:tool messages, looping web_search forever). See
-    # callbacks-configmap.yaml and the mount under /app/ above.
-    callbacks: ["gemma_tool_rewrite.handler", "prometheus", "otel"]
+    # Qwen3.5 handles role:tool natively via ollama_chat, so the old
+    # gemma_tool_rewrite pre_call_hook (removed with gemma4) is no longer
+    # needed.
+    callbacks: ["prometheus", "otel"]
     # drop_params=True lets LiteLLM strip provider-unsupported request
     # fields (e.g. `encoding_format: base64` that the OpenAI Python client
     # always sends on embeddings; Ollama's embedding endpoint rejects it

@@ -13,8 +13,8 @@
 # table and runs CREATE EXTENSION vector on first use (postgres-init-
 # configmap.yaml already does the CREATE EXTENSION proactively in case
 # Mem0's check ever changes). LLM + embedder both route through LiteLLM
-# (provider: openai with openai_base_url override) so Ollama-served
-# nomic-embed-text + gemma4 stay local; see
+# (provider: openai with openai_base_url override) so the local Qwen3.5 chat
+# model (GPU) and nomic-embed-text (CPU ollama-embed) stay local; see
 # gitops/manifests/litellm/values.yaml for the model aliases.
 apiVersion: v1
 kind: ConfigMap
@@ -48,7 +48,7 @@ data:
     LITELLM_URL = os.environ["LITELLM_BASE_URL"]
     LITELLM_KEY = os.environ["LITELLM_API_KEY"]
 
-    LLM_MODEL = os.environ.get("MEM0_LLM_MODEL", "gemma4:e4b")
+    LLM_MODEL = os.environ.get("MEM0_LLM_MODEL", "qwen3.5:9b")
     EMBED_MODEL = os.environ.get("MEM0_EMBED_MODEL", "text-embedding-3-small")
     EMBED_DIMS = int(os.environ.get("MEM0_EMBED_DIMS", "768"))
 
