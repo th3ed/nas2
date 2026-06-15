@@ -1,10 +1,10 @@
 {
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true
-  },
   "permissions": {
     "allow": [
       "Bash(.claude/skills/bws-secrets/scripts/bws-helper.py:*)"
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
   }
 }
