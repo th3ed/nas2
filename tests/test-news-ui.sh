@@ -20,7 +20,11 @@ fi
 pass "$TITLE"
 
 TITLE="news: ui /healthz responds 200"
-code=$(ssh_kubectl "exec -n agentregistry deploy/agentregistry -- wget -qO- -S --timeout=10 http://news-ui.news:8081/healthz 2>&1" | awk '/HTTP\//{print $2; exit}')
+# wget -qO- writes the body to stdout and -S writes headers to stderr; over the
+# ssh pipe the 2-byte body ("ok") and the status line interleave onto one line
+# ("ok  HTTP/1.1 200 OK"), so a positional awk '$2' grabs "HTTP/1.1". Pull the
+# 3-digit code that follows HTTP/x.x regardless of any leading token.
+code=$(ssh_kubectl "exec -n agentregistry deploy/agentregistry -- wget -qO- -S --timeout=10 http://news-ui.news:8081/healthz 2>&1" | sed -nE 's#.*HTTP/[0-9.]+ ([0-9]{3}).*#\1#p' | head -1)
 if [[ "$code" != "200" ]]; then
     fail "$TITLE: HTTP code=$code"
     exit 1
