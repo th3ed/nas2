@@ -162,6 +162,12 @@ spec:
             # key is required for the SearXNG backend.
             - name: SEARXNG_URL
               value: http://searxng.searxng:8080
+            # Voice subsystem caches the faster-whisper STT model
+            # (~150 MB for "base") and the NeuTTS GGUF (~200 MB) on
+            # first use. HF_HOME points HuggingFace's cache at the
+            # hermes-data PVC so models survive pod restarts.
+            - name: HF_HOME
+              value: /opt/data/.cache/huggingface
           volumeMounts:
             - name: data
               mountPath: /opt/data

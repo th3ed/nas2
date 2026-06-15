@@ -191,6 +191,41 @@ data:
         - segment-anything
         - weights-and-biases
 
+    # Voice mode — STT for inbound Telegram voice memos and CLI ctrl+b
+    # recording; TTS for spoken replies once a user issues /voice on.
+    # auto_tts is false so text stays the default reply mode; /voice on
+    # toggles spoken replies for that session, /voice off reverts.
+    # Inbound voice-memo transcription is always-on whenever stt is
+    # configured — independent of /voice state.
+    #
+    # Both providers run locally on CPU so the RTX stays reserved for
+    # the chat model (Qwen3.5 9B). Nothing audio-related leaves the
+    # tailnet. faster-whisper "base" is ~150 MB; NeuTTS air-q4 GGUF is
+    # ~200 MB — both cached on the hermes-data PVC via HF_HOME pointed
+    # at /opt/data/.cache/huggingface in deployment.yaml.
+    #
+    # If neuphonic deps turn out to be missing in the upstream image,
+    # swap `provider: neutts` to `provider: edge` (free, no API key,
+    # MS Edge cloud TTS — text-only egress, no audio data leaves).
+    voice:
+      record_key: "ctrl+b"
+      max_recording_seconds: 120
+      auto_tts: false
+      beep_enabled: true
+      silence_threshold: 200
+      silence_duration: 3.0
+
+    stt:
+      provider: "local"
+      local:
+        model: "base"
+
+    tts:
+      provider: "neutts"
+      neutts:
+        model: "neuphonic/neutts-air-q4-gguf"
+        device: "cpu"
+
     # Remote MCP servers Hermes connects to at startup. The schema and
     # tools.{resources,prompts} semantics are documented at
     # https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference

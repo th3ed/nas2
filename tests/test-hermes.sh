@@ -109,3 +109,38 @@ if echo "$doctor_out" | grep -qE '⚠ web \(missing'; then
     exit 1
 fi
 pass "$TITLE"
+
+# Voice mode — stt+tts blocks in the ConfigMap so inbound Telegram voice
+# memos transcribe and /voice on yields spoken replies. We assert the
+# GitOps state (the keys are present in the rendered ConfigMap), and the
+# runtime state (hermes doctor still shows ✓ tts and ✓ messaging — a
+# broken provider config would flip either to a ⚠ line).
+TITLE="hermes: ConfigMap declares stt and tts providers"
+cm_yaml=$(ssh_kubectl "get configmap hermes-app-config -n hermes -o jsonpath='{.data.config\.yaml}'" 2>&1) || {
+    fail "$TITLE: kubectl get configmap failed"
+    exit 1
+}
+if ! echo "$cm_yaml" | grep -qE '^[[:space:]]+provider:[[:space:]]+"local"'; then
+    fail "$TITLE: missing stt.provider: local in ConfigMap"
+    exit 1
+fi
+if ! echo "$cm_yaml" | grep -qE '^[[:space:]]+provider:[[:space:]]+"(neutts|edge)"'; then
+    fail "$TITLE: missing tts.provider (neutts|edge) in ConfigMap"
+    exit 1
+fi
+pass "$TITLE"
+
+TITLE="hermes: tts and messaging toolsets stay enabled in doctor"
+if echo "$doctor_out" | grep -qE '⚠ (tts|messaging) \('; then
+    fail "$TITLE: hermes doctor reports a tts or messaging gate failure"
+    exit 1
+fi
+if ! echo "$doctor_out" | grep -qE '✓ tts(\s|$)'; then
+    fail "$TITLE: hermes doctor does not show ✓ tts"
+    exit 1
+fi
+if ! echo "$doctor_out" | grep -qE '✓ messaging(\s|$)'; then
+    fail "$TITLE: hermes doctor does not show ✓ messaging"
+    exit 1
+fi
+pass "$TITLE"
