@@ -25,9 +25,16 @@ data:
     # Local-first: the free Qwen3.5 9B handles routine turns; users can switch
     # per-session via the CLI/API. Frontier Claude models are listed in the
     # picker below but are never an automatic slot (explicit-approval only).
+    #
+    # IMPORTANT: the chosen-model key in this dict is `default`, not `model`.
+    # web_server._normalize_config_for_web, gateway/run.py current_model, and
+    # hermes_cli/runtime_provider.py all strict-read `model.default` and fall
+    # back to `""` — i.e., with `model.model` the dashboard Chat picker shows
+    # "no model". Lenient readers (dump.py, doctor.py) accept either, which
+    # is why the Telegram path still answered prompts under the wrong key.
     model:
       provider: custom
-      model: "qwen3.5:9b"
+      default: "qwen3.5:9b"
       base_url: http://litellm.litellm:4000/v1
       api_key: ${LITELLM_API_KEY}
       context_length: 131072
