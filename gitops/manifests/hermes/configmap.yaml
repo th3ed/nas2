@@ -239,6 +239,30 @@ data:
       edge:
         voice: "en-US-AriaNeural"
 
+    # Hide Hermes's built-in `memory` toolset so the agent is forced onto
+    # the mem0 MCP server's memory_* tools (see mcp_servers.memory below).
+    # The built-in memory writes to ~/.hermes/memories/MEMORY.md + USER.md
+    # on the pod-local filesystem and shadows the MCP tools because its
+    # name (`memory`) is more attractive to the LLM than `memory_add`/
+    # `memory_search`. `agent.disabled_toolsets` is documented as applying
+    # after per-platform tool config — toolsets listed here are always
+    # removed — and it also suppresses the MEMORY_GUIDANCE system-prompt
+    # injection so the agent isn't told to use the missing toolset.
+    # See https://hermes-agent.nousresearch.com/docs/reference/toolsets-reference
+    # and upstream issue NousResearch/hermes-agent#2761 (the `hermes tools
+    # disable memory` CLI command is bugged; this config path is the
+    # working workaround).
+    agent:
+      disabled_toolsets:
+        - memory
+
+    # Defense-in-depth: also turn off the built-in memory storage /
+    # user-profile pipeline so MEMORY.md / USER.md never get written even
+    # if the toolset switch above behaves unexpectedly on a future bump.
+    memory:
+      memory_enabled: false
+      user_profile_enabled: false
+
     # Remote MCP servers Hermes connects to at startup. The schema and
     # tools.{resources,prompts} semantics are documented at
     # https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference
