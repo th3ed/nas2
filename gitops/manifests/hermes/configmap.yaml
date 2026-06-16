@@ -260,6 +260,38 @@ data:
     agent:
       disabled_toolsets:
         - memory
+      # Compensate for the lost MEMORY_GUIDANCE injection. Hermes's
+      # /opt/hermes/agent/prompt_builder.py only emits MEMORY_GUIDANCE when
+      # the built-in `memory` toolset is enabled — which we disabled above
+      # to keep MEMORY.md from getting written. Without that guidance the
+      # 9B model sees the mcp_mem0_memory_* tools but never proactively
+      # calls them. `agent.system_prompt` is read by
+      # /opt/hermes/gateway/run.py:2295 (falls back from HERMES_EPHEMERAL_
+      # SYSTEM_PROMPT) and appended to the assembled system prompt every
+      # turn, making it the durable, GitOps-managed equivalent of the
+      # ephemeral env var.
+      system_prompt: |
+        Long-term memory tools — you have a persistent cross-session
+        memory store via the `mem0` MCP server. The available tools are:
+
+          mcp_mem0_memory_search  — semantic search over prior memories
+          mcp_mem0_memory_add     — store a durable fact / preference
+          mcp_mem0_memory_get     — fetch one memory by id
+          mcp_mem0_memory_list    — list all memories (debug)
+          mcp_mem0_memory_update  — replace a memory by id
+          mcp_mem0_memory_delete  — delete a memory by id
+
+        BEFORE you answer ANY question about the user's identity, work,
+        location, preferences, environment, or prior conversations — or
+        when the user asks "do you remember" / "what do you know about me"
+        — you MUST call mcp_mem0_memory_search first with a short query
+        summarizing what you need to recall. An empty result means no
+        prior context, not a tool failure.
+
+        AFTER the user states a durable personal fact, preference,
+        decision, or environment detail, you MUST call
+        mcp_mem0_memory_add to persist it (one call per fact). Do NOT
+        store ephemeral task state, todo items, or chat scratch.
 
     # Defense-in-depth: also turn off the built-in memory storage /
     # user-profile pipeline so MEMORY.md / USER.md never get written even

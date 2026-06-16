@@ -88,3 +88,25 @@ if ! printf '%s\n' "$cfg" | grep -qE '^[[:space:]]*memory_enabled:[[:space:]]*fa
     exit 1
 fi
 pass "$TITLE"
+
+# 4. The agent.system_prompt block carries the proactive memory-tool nudge.
+# Without this, disabling the built-in memory toolset also kills the upstream
+# MEMORY_GUIDANCE injection (agent/prompt_builder.py:150-171, gated on
+# "memory" in valid_tool_names) and the agent never proactively calls the
+# mcp_mem0_memory_* tools — they're visible but unused. This config block
+# is the durable, GitOps-managed equivalent of HERMES_EPHEMERAL_SYSTEM_PROMPT
+# (read by gateway/run.py:2295 in the fallback branch).
+TITLE="hermes-memory-routing: configmap carries agent.system_prompt with mcp_mem0_memory_* nudge"
+if ! printf '%s\n' "$cfg" | grep -qE '^[[:space:]]*system_prompt:[[:space:]]*\|[[:space:]]*$'; then
+    fail "$TITLE: config.yaml missing agent.system_prompt block (literal |)"
+    exit 1
+fi
+if ! printf '%s\n' "$cfg" | grep -q 'mcp_mem0_memory_search'; then
+    fail "$TITLE: agent.system_prompt missing reference to mcp_mem0_memory_search"
+    exit 1
+fi
+if ! printf '%s\n' "$cfg" | grep -q 'mcp_mem0_memory_add'; then
+    fail "$TITLE: agent.system_prompt missing reference to mcp_mem0_memory_add"
+    exit 1
+fi
+pass "$TITLE"
