@@ -198,15 +198,22 @@ data:
     # Inbound voice-memo transcription is always-on whenever stt is
     # configured — independent of /voice state.
     #
-    # Both providers run locally on CPU so the RTX stays reserved for
-    # the chat model (Qwen3.5 9B). Nothing audio-related leaves the
-    # tailnet. faster-whisper "base" is ~150 MB; NeuTTS air-q4 GGUF is
-    # ~200 MB — both cached on the hermes-data PVC via HF_HOME pointed
-    # at /opt/data/.cache/huggingface in deployment.yaml.
+    # STT is local: faster-whisper "base" (~150 MB) on CPU — the RTX
+    # stays reserved for Qwen3.5 9B. HF_HOME (set in deployment.yaml)
+    # pins the model cache to the hermes-data PVC so the first-run
+    # download survives pod restarts.
     #
-    # If neuphonic deps turn out to be missing in the upstream image,
-    # swap `provider: neutts` to `provider: edge` (free, no API key,
-    # MS Edge cloud TTS — text-only egress, no audio data leaves).
+    # TTS is `edge` (Hermes default): Microsoft's free Edge-Read-Aloud
+    # cloud endpoint. No API key, no model download, sub-second latency.
+    # Reply *text* egresses to Microsoft; no audio data ever leaves the
+    # cluster's egress in this direction (the synth happens on MS's
+    # side and audio bytes come back). NeuTTS was the first pick for
+    # fully-local TTS but the upstream `nousresearch/hermes-agent` image
+    # ships without `espeak-ng` — NeuTTS is a phoneme-input model and
+    # would fail at first inference via the phonemizer backend. A
+    # fully-local TTS path is possible via a custom image overlay that
+    # apt-installs espeak-ng (+ verifies neuphonic/phonemizer in the
+    # venv); not done here to keep this change config-only.
     voice:
       record_key: "ctrl+b"
       max_recording_seconds: 120
@@ -221,10 +228,9 @@ data:
         model: "base"
 
     tts:
-      provider: "neutts"
-      neutts:
-        model: "neuphonic/neutts-air-q4-gguf"
-        device: "cpu"
+      provider: "edge"
+      edge:
+        voice: "en-US-AriaNeural"
 
     # Remote MCP servers Hermes connects to at startup. The schema and
     # tools.{resources,prompts} semantics are documented at
