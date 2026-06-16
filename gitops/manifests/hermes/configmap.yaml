@@ -240,14 +240,19 @@ data:
         voice: "en-US-AriaNeural"
 
     # Hide Hermes's built-in `memory` toolset so the agent is forced onto
-    # the mem0 MCP server's memory_* tools (see mcp_servers.memory below).
+    # the mem0 MCP server's tools (registered below as `mcp_servers.mem0`).
     # The built-in memory writes to ~/.hermes/memories/MEMORY.md + USER.md
     # on the pod-local filesystem and shadows the MCP tools because its
-    # name (`memory`) is more attractive to the LLM than `memory_add`/
-    # `memory_search`. `agent.disabled_toolsets` is documented as applying
-    # after per-platform tool config — toolsets listed here are always
-    # removed — and it also suppresses the MEMORY_GUIDANCE system-prompt
-    # injection so the agent isn't told to use the missing toolset.
+    # tool name (`memory`) is more attractive to the LLM than the
+    # MCP-prefixed `mcp_<server>_<tool>` names.
+    #
+    # Important name-collision note: hermes_cli/tools_config.py:1287-1289
+    # applies `agent.disabled_toolsets` to a set that contains BOTH built-in
+    # toolset names AND mcp_servers keys. So a key named `memory` here would
+    # disable the MCP server too. We name the MCP server `mem0` to avoid the
+    # collision — tools surface to the LLM as `mcp_mem0_memory_add`,
+    # `mcp_mem0_memory_search`, etc.
+    #
     # See https://hermes-agent.nousresearch.com/docs/reference/toolsets-reference
     # and upstream issue NousResearch/hermes-agent#2761 (the `hermes tools
     # disable memory` CLI command is bugged; this config path is the
@@ -269,13 +274,16 @@ data:
     # — Hermes performs the MCP handshake and registers each tool the
     # remote exposes alongside its built-in tools and skills.
     #
-    # memory: self-hosted Mem0 + FastMCP wrapper. In-cluster only at this
+    # mem0: self-hosted Mem0 + FastMCP wrapper. In-cluster only at this
     # URL (AUTH_DISABLED on the backend; the tailnet/cluster network is
     # the boundary). Exposes memory_add / memory_search / memory_get /
     # memory_list / memory_update / memory_delete for cross-session user
-    # facts and preferences. See gitops/manifests/mem0/.
+    # facts and preferences (surface as mcp_mem0_memory_* to the LLM).
+    # The server key MUST NOT be `memory` — that name collides with the
+    # disabled built-in toolset above and the same `disabled_toolsets`
+    # filter would suppress this server too. See gitops/manifests/mem0/.
     mcp_servers:
-      memory:
+      mem0:
         url: http://mem0-mcp.mem0:8080/mcp/
         timeout: 60
         connect_timeout: 30

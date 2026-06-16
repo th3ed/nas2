@@ -55,9 +55,13 @@ for platform in cli telegram; do
     pass "$TITLE"
 
     TITLE="hermes-memory-routing: mem0 MCP server registered on $platform"
-    # MCP server line looks like:  "  memory  all tools enabled"
-    if ! printf '%s\n' "$listing" | grep -qE '^[[:space:]]+memory[[:space:]]+all tools enabled[[:space:]]*$'; then
-        fail "$TITLE: mem0 MCP 'memory' server not listed as all-tools-enabled"
+    # MCP server line looks like:  "  mem0  all tools enabled". The MCP
+    # server is intentionally NOT named `memory` — that name collides with
+    # the built-in `memory` toolset under the shared `disabled_toolsets`
+    # filter (hermes_cli/tools_config.py:1287-1289), which would suppress
+    # this server's tools too. See the configmap comment for details.
+    if ! printf '%s\n' "$listing" | grep -qE '^[[:space:]]+mem0[[:space:]]+all tools enabled[[:space:]]*$'; then
+        fail "$TITLE: mem0 MCP 'mem0' server not listed as all-tools-enabled"
         printf '%s\n' "$listing" >&2
         exit 1
     fi
