@@ -66,18 +66,21 @@ done
 
 # 3. The mounted config.yaml carries the disable knobs — so a configmap
 # revert or an Argo desync would surface here even if the binary is happy.
+# Use the pod-mounted file rather than `kubectl get cm -o jsonpath=...` to
+# sidestep brace-expansion / escape pitfalls when shipping the command
+# through ssh.
 TITLE="hermes-memory-routing: configmap carries agent.disabled_toolsets + memory.memory_enabled"
-cfg=$(ssh_kubectl "-n hermes get configmap hermes-app-config -o jsonpath={.data.config\\.yaml}")
+cfg=$(ssh_kubectl "-n hermes exec deploy/hermes -- cat /opt/data/config.yaml")
 if ! printf '%s\n' "$cfg" | grep -qE '^[[:space:]]*disabled_toolsets:[[:space:]]*$'; then
-    fail "$TITLE: configmap missing agent.disabled_toolsets block"
+    fail "$TITLE: config.yaml missing agent.disabled_toolsets block"
     exit 1
 fi
 if ! printf '%s\n' "$cfg" | grep -qE '^[[:space:]]+-[[:space:]]+memory[[:space:]]*$'; then
-    fail "$TITLE: configmap missing '- memory' entry under disabled_toolsets"
+    fail "$TITLE: config.yaml missing '- memory' entry under disabled_toolsets"
     exit 1
 fi
 if ! printf '%s\n' "$cfg" | grep -qE '^[[:space:]]*memory_enabled:[[:space:]]*false[[:space:]]*$'; then
-    fail "$TITLE: configmap missing memory.memory_enabled: false"
+    fail "$TITLE: config.yaml missing memory.memory_enabled: false"
     exit 1
 fi
 pass "$TITLE"
