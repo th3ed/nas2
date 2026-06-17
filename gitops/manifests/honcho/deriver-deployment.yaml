@@ -31,8 +31,8 @@ spec:
       containers:
         - name: honcho-deriver
           # Same image as honcho-api — see api-deployment.yaml for the pre-release
-# rationale (Hermes plugin requires /v3/*, v2.0.3 only has /v2/*).
-image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
+          # rationale (Hermes plugin requires /v3/*, v2.0.3 only has /v2/*).
+          image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
           imagePullPolicy: IfNotPresent
           # docker-compose.yml.example uses `uv run python -m src.deriver`,
           # but `uv run` at runtime triggers a workspace sync that fails
