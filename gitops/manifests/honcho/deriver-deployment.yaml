@@ -32,8 +32,12 @@ spec:
         - name: honcho-deriver
           image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
           imagePullPolicy: IfNotPresent
-          # Upstream docker-compose.yml.example entrypoint, verbatim.
-          command: ["uv", "run", "python", "-m", "src.deriver"]
+          # docker-compose.yml.example uses `uv run python -m src.deriver`,
+          # but `uv run` at runtime triggers a workspace sync that fails
+          # because the workspace member dirs (sdks/python, honcho-cli)
+          # aren't copied into the image. Bypass uv: the pre-built venv at
+          # /app/.venv already has everything python -m src.deriver needs.
+          command: ["/app/.venv/bin/python", "-m", "src.deriver"]
           envFrom:
             - secretRef:
                 name: honcho-secrets

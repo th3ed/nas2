@@ -60,7 +60,17 @@ spec:
         - name: migrate
           image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
           imagePullPolicy: IfNotPresent
-          command: ["uv", "run", "alembic", "upgrade", "head"]
+          # Use the pre-built venv directly. The Dockerfile ships uv 0.9.24
+          # and runs `uv sync --frozen` at build time to populate /app/.venv,
+          # but Honcho's pyproject.toml has `tool.uv.workspace.members:
+          # [sdks/python, honcho-cli]` and `tool.uv.sources` pointing to those
+          # workspace members — none of which are copied into the image
+          # (`COPY src/ migrations/ scripts/ docker/ alembic.ini config.toml*`
+          # only). `uv run ...` at runtime triggers a sync that fails with
+          # "honcho-ai references a workspace ... not a workspace member"
+          # because the member dirs don't exist on disk. The pre-built venv
+          # already has alembic installed; bypass uv entirely.
+          command: ["/app/.venv/bin/alembic", "upgrade", "head"]
           envFrom:
             - secretRef:
                 name: honcho-secrets
