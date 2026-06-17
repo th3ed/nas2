@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: honcho-deriver
-          image: ghcr.io/plastic-labs/honcho:v2.0.3
+          image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
           imagePullPolicy: IfNotPresent
           # Upstream docker-compose.yml.example entrypoint, verbatim.
           command: ["uv", "run", "python", "-m", "src.deriver"]
