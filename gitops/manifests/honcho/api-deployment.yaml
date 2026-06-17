@@ -49,6 +49,25 @@ spec:
         app.kubernetes.io/name: honcho-api
         app.kubernetes.io/component: api
     spec:
+      initContainers:
+        # Honcho upstream doesn't auto-run Alembic on startup — the api
+        # server CMD is `fastapi run --host 0.0.0.0 src/main.py`, no
+        # migrations step. The docker-compose.yml.example also doesn't
+        # show one (verified at v2.0.3 contents). So we run them ourselves
+        # before the api starts: same image, same DB env, just a different
+        # entrypoint. Alembic is idempotent — re-running on an
+        # up-to-date schema is a no-op.
+        - name: migrate
+          image: ghcr.io/plastic-labs/honcho:v2.0.3
+          imagePullPolicy: IfNotPresent
+          command: ["uv", "run", "alembic", "upgrade", "head"]
+          envFrom:
+            - secretRef:
+                name: honcho-secrets
+                optional: false
+          env:
+            - name: DB_CONNECTION_URI
+              value: postgresql+psycopg://honcho:$(POSTGRES_PASSWORD)@honcho-postgres.honcho:5432/honcho
       containers:
         - name: honcho
           image: ghcr.io/plastic-labs/honcho:v2.0.3
