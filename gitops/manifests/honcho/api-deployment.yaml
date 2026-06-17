@@ -107,15 +107,18 @@ spec:
             - name: LOG_LEVEL
               value: INFO
           readinessProbe:
-            httpGet:
-              path: /health
+            # Honcho v2.0.3 has no /health endpoint (verified empirically —
+            # only /v2/* routes are mounted; /health, /healthz, /v1/health
+            # all 404). tcpSocket on the bound port is the correct shape:
+            # the uvicorn process is up = the FastAPI app is reachable.
+            # Same pattern mem0-mcp used for its streamable-http server.
+            tcpSocket:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
-            httpGet:
-              path: /health
+            tcpSocket:
               port: http
             initialDelaySeconds: 60
             periodSeconds: 30

@@ -26,20 +26,17 @@ if [[ "$postgres_ready" != "1" || "$api_ready" != "1" || "$deriver_ready" != "1"
 fi
 pass "$TITLE"
 
-TITLE="honcho: /health endpoint returns 200"
-# Probe via the kube apiserver proxy so we don't depend on a debug pod or
-# wget/curl being present in any specific container image.
-status=$(ssh_kubectl "get --raw '/api/v1/namespaces/honcho/services/api:8000/proxy/health' -v=8 2>&1" | \
-    awk '/^Response Status:/ {print $3}' | tail -n 1)
-# Fallback: just fetch the body — if it's non-empty + non-error-shape we
-# call it good. The /health endpoint per Honcho docs returns a 200 with
-# a small JSON {"status":"ok"} body.
-body=$(ssh_kubectl "get --raw '/api/v1/namespaces/honcho/services/api:8000/proxy/health' 2>&1") || {
-    fail "$TITLE: api /health unreachable via proxy: $body"
+TITLE="honcho: /docs (FastAPI OpenAPI docs) reachable in-cluster"
+# Honcho v2.0.3 has no /health endpoint (only /v2/* routes are mounted).
+# FastAPI's auto-generated /docs is a stable always-200 surface for an
+# "is the api server actually serving HTTP" probe. The body contains
+# "Swagger" boilerplate.
+body=$(ssh_kubectl "get --raw '/api/v1/namespaces/honcho/services/api:8000/proxy/docs' 2>&1") || {
+    fail "$TITLE: api /docs unreachable via proxy: $body"
     exit 1
 }
-if ! printf '%s' "$body" | grep -qE '(ok|healthy|"status")'; then
-    fail "$TITLE: unexpected /health body: $body"
+if ! printf '%s' "$body" | grep -qiE 'swagger|honcho|openapi'; then
+    fail "$TITLE: unexpected /docs body: ${body:0:200}"
     exit 1
 fi
 pass "$TITLE"
