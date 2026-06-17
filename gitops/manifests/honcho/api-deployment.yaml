@@ -68,17 +68,29 @@ spec:
           # default "stable-only" rule and the exception path used here.
           image: ghcr.io/plastic-labs/honcho:latest@sha256:6942f481cbcfb57ba0fffbd39399fa8ab6eb755a2d5113ee1258cd487a9d7271
           imagePullPolicy: IfNotPresent
-          # Use the pre-built venv directly. The Dockerfile ships uv 0.9.24
-          # and runs `uv sync --frozen` at build time to populate /app/.venv,
-          # but Honcho's pyproject.toml has `tool.uv.workspace.members:
-          # [sdks/python, honcho-cli]` and `tool.uv.sources` pointing to those
-          # workspace members — none of which are copied into the image
-          # (`COPY src/ migrations/ scripts/ docker/ alembic.ini config.toml*`
-          # only). `uv run ...` at runtime triggers a sync that fails with
-          # "honcho-ai references a workspace ... not a workspace member"
-          # because the member dirs don't exist on disk. The pre-built venv
-          # already has alembic installed; bypass uv entirely.
-          command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+          # Bootstrap sequence per scripts/configure_embeddings.py docstring:
+          #   1. alembic upgrade head           # creates default vector(1536)
+          #   2. configure_embeddings.py --yes  # ALTER columns to target dim
+          #   3. start api+deriver               # validators refuse mismatched dim
+          #
+          # Both steps run via the pre-built /app/.venv (the Dockerfile ships
+          # uv 0.9.24 + `uv sync --frozen` at build time but the workspace
+          # members aren't in the image, so `uv run` at runtime fails with
+          # "honcho-ai references a workspace ... not a workspace member" —
+          # bypass uv entirely).
+          #
+          # EMBEDDING_VECTOR_DIMENSIONS must be set HERE too so the script
+          # sees the right target. The api/deriver containers re-validate
+          # at startup; setting only there would let migrate run with
+          # default 1536 → script absent → boot fails.
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eux
+              cd /app
+              /app/.venv/bin/alembic upgrade head
+              /app/.venv/bin/python scripts/configure_embeddings.py --yes
           envFrom:
             - secretRef:
                 name: honcho-secrets
@@ -86,6 +98,16 @@ spec:
           env:
             - name: DB_CONNECTION_URI
               value: postgresql+psycopg://honcho:$(POSTGRES_PASSWORD)@honcho-postgres.honcho:5432/honcho
+            - name: EMBEDDING_VECTOR_DIMENSIONS
+              value: "768"
+            - name: EMBEDDING_MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: EMBEDDING_MODEL_CONFIG__MODEL
+              value: text-embedding-3-small
+            - name: LLM_OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
       containers:
         - name: honcho
           # Pre-release pin — see migrate initContainer above for rationale.
