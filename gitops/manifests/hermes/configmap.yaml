@@ -239,89 +239,37 @@ data:
       edge:
         voice: "en-US-AriaNeural"
 
-    # Hide Hermes's built-in `memory` toolset so the agent is forced onto
-    # the mem0 MCP server's tools (registered below as `mcp_servers.mem0`).
-    # The built-in memory writes to ~/.hermes/memories/MEMORY.md + USER.md
-    # on the pod-local filesystem and shadows the MCP tools because its
-    # tool name (`memory`) is more attractive to the LLM than the
-    # MCP-prefixed `mcp_<server>_<tool>` names.
+    # Long-term memory is provided by the native Honcho plugin
+    # (memory.provider: honcho). Honcho is the community-favorite memory
+    # backend for self-hosted Hermes — first on the official provider list
+    # at hermes-agent.nousresearch.com, the architectural pair to Hermes's
+    # "agent that grows with you" thesis, and AGPL-3.0 / self-hostable via
+    # the upstream-published image at ghcr.io/plastic-labs/honcho.
     #
-    # Important name-collision note: hermes_cli/tools_config.py:1287-1289
-    # applies `agent.disabled_toolsets` to a set that contains BOTH built-in
-    # toolset names AND mcp_servers keys. So a key named `memory` here would
-    # disable the MCP server too. We name the MCP server `mem0` to avoid the
-    # collision — tools surface to the LLM as `mcp_mem0_memory_add`,
-    # `mcp_mem0_memory_search`, etc.
+    # Honcho's per-host config (peerName, workspace, aiPeer, recallMode,
+    # …) lives in the sibling `honcho.json` ConfigMap key. Hermes reads
+    # that file at $HERMES_HOME/honcho.json (i.e. /opt/data/honcho.json) —
+    # mounted via subPath in deployment.yaml. Edit the ConfigMap, then
+    # `rollout restart deploy/hermes` to pick up changes (subPath mounts
+    # freeze at pod-start, same gotcha as openclaw.json).
     #
-    # See https://hermes-agent.nousresearch.com/docs/reference/toolsets-reference
-    # and upstream issue NousResearch/hermes-agent#2761 (the `hermes tools
-    # disable memory` CLI command is bugged; this config path is the
-    # working workaround).
-    agent:
-      disabled_toolsets:
-        - memory
-      # Compensate for the lost MEMORY_GUIDANCE injection. Hermes's
-      # /opt/hermes/agent/prompt_builder.py only emits MEMORY_GUIDANCE when
-      # the built-in `memory` toolset is enabled — which we disabled above
-      # to keep MEMORY.md from getting written. Without that guidance the
-      # 9B model sees the mcp_mem0_memory_* tools but never proactively
-      # calls them. `agent.system_prompt` is read by
-      # /opt/hermes/gateway/run.py:2295 (falls back from HERMES_EPHEMERAL_
-      # SYSTEM_PROMPT) and appended to the assembled system prompt every
-      # turn, making it the durable, GitOps-managed equivalent of the
-      # ephemeral env var.
-      system_prompt: |
-        Long-term memory tools — you have a persistent cross-session
-        memory store via the `mem0` MCP server. The available tools are:
-
-          mcp_mem0_memory_search  — semantic search over prior memories
-          mcp_mem0_memory_add     — store a durable fact / preference
-          mcp_mem0_memory_get     — fetch one memory by id
-          mcp_mem0_memory_list    — list all memories (debug)
-          mcp_mem0_memory_update  — replace a memory by id
-          mcp_mem0_memory_delete  — delete a memory by id
-
-        BEFORE you answer ANY question about the user's identity, work,
-        location, preferences, environment, or prior conversations — or
-        when the user asks "do you remember" / "what do you know about me"
-        — you MUST call mcp_mem0_memory_search first with a short query
-        summarizing what you need to recall. An empty result means no
-        prior context, not a tool failure.
-
-        AFTER the user states a durable personal fact, preference,
-        decision, or environment detail, you MUST call
-        mcp_mem0_memory_add to persist it (one call per fact). Do NOT
-        store ephemeral task state, todo items, or chat scratch.
-
-    # Defense-in-depth: also turn off the built-in memory storage /
-    # user-profile pipeline so MEMORY.md / USER.md never get written even
-    # if the toolset switch above behaves unexpectedly on a future bump.
+    # Because the native provider plugs into the built-in `memory` toolset
+    # (NOT MCP), the agent sees the canonical short tool names the model
+    # was trained on (memory_add, memory_search, …) AND
+    # /opt/hermes/run_agent.py:6095 auto-injects MEMORY_GUIDANCE into the
+    # system prompt. No `agent.system_prompt` nudge or `disabled_toolsets`
+    # workaround needed.
     memory:
-      memory_enabled: false
-      user_profile_enabled: false
+      provider: honcho
+      memory_enabled: true
+      user_profile_enabled: true
 
     # Remote MCP servers Hermes connects to at startup. The schema and
     # tools.{resources,prompts} semantics are documented at
     # https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference
     # — Hermes performs the MCP handshake and registers each tool the
     # remote exposes alongside its built-in tools and skills.
-    #
-    # mem0: self-hosted Mem0 + FastMCP wrapper. In-cluster only at this
-    # URL (AUTH_DISABLED on the backend; the tailnet/cluster network is
-    # the boundary). Exposes memory_add / memory_search / memory_get /
-    # memory_list / memory_update / memory_delete for cross-session user
-    # facts and preferences (surface as mcp_mem0_memory_* to the LLM).
-    # The server key MUST NOT be `memory` — that name collides with the
-    # disabled built-in toolset above and the same `disabled_toolsets`
-    # filter would suppress this server too. See gitops/manifests/mem0/.
     mcp_servers:
-      mem0:
-        url: http://mem0-mcp.mem0:8080/mcp/
-        timeout: 60
-        connect_timeout: 30
-        tools:
-          resources: false
-          prompts: false
       news:
         url: http://news-mcp.news:8080/mcp/
         timeout: 60
@@ -335,3 +283,27 @@ data:
     # reads from the envFrom-injected hermes-secrets Secret. Long-polling
     # mode — no webhook needed; the Tailscale Ingress only fronts the
     # OpenAI-compatible API server on port 8642.
+  # Honcho per-host config, subPath-mounted at /opt/data/honcho.json by
+  # deployment.yaml. Schema documented at
+  # https://honcho.dev/docs/v3/guides/integrations/hermes.
+  #
+  # baseUrl points at our in-cluster Honcho api Service; no API key field
+  # because the api server runs with AUTH_USE_AUTH=false (network is the
+  # auth boundary in this homelab — see gitops/manifests/honcho/api-deployment.yaml).
+  #
+  # The hosts.hermes block names the peers Honcho uses for dialectic
+  # modeling: peerName=ed is the human, aiPeer=hermes is the agent.
+  # workspace=hermes scopes memories to this agent (so future Claude Code /
+  # OpenCode integrations can use distinct workspaces and not collide).
+  honcho.json: |
+    {
+      "baseUrl": "http://api.honcho:8000",
+      "hosts": {
+        "hermes": {
+          "enabled": true,
+          "aiPeer": "hermes",
+          "peerName": "ed",
+          "workspace": "hermes"
+        }
+      }
+    }

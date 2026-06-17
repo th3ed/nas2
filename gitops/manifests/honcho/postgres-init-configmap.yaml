@@ -1,0 +1,14 @@
+---
+# Mirrors upstream Honcho's init.sql verbatim
+# (https://github.com/plastic-labs/honcho/blob/v2.0.3/init.sql). The
+# pgvector/pgvector:pg15 image ships the extension binaries; the CREATE
+# EXTENSION is still required per database before Honcho's deriver can
+# write embedding vectors.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: honcho-postgres-init
+  namespace: honcho
+data:
+  init.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;

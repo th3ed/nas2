@@ -1,15 +1,18 @@
 ---
-# pgvector backing store for Mem0. Same image tag (`ankane/pgvector:v0.5.1`)
-# Mem0's upstream docker-compose pins, so we stay on the version their
-# integration tests cover.
+# Postgres + pgvector backing store for Honcho. Image
+# `pgvector/pgvector:pg15` matches upstream Honcho's docker-compose.yml.example
+# (https://github.com/plastic-labs/honcho/blob/v2.0.3/docker-compose.yml.example)
+# verbatim — same image tag Plastic Labs runs in their integration tests.
+# Mirrors the mem0-postgres StatefulSet shape (explicit apiserver defaults
+# to dodge Argo SSA drift on every reconcile).
 apiVersion: v1
 kind: Service
 metadata:
-  name: mem0-postgres
-  namespace: mem0
+  name: honcho-postgres
+  namespace: honcho
 spec:
   selector:
-    app.kubernetes.io/name: mem0-postgres
+    app.kubernetes.io/name: honcho-postgres
   ports:
     - name: pg
       port: 5432
@@ -19,17 +22,13 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mem0-postgres
-  namespace: mem0
+  name: honcho-postgres
+  namespace: honcho
   labels:
-    app.kubernetes.io/name: mem0-postgres
+    app.kubernetes.io/name: honcho-postgres
 spec:
-  serviceName: mem0-postgres
+  serviceName: honcho-postgres
   replicas: 1
-  # Explicit defaults the apiserver would set anyway. Spelling them out
-  # keeps Argo SSA diff from flagging them as drift on every reconcile.
-  # Argo normalizes most Deployment defaults but doesn't reach into a
-  # StatefulSet's volumeClaimTemplates or updateStrategy.
   podManagementPolicy: OrderedReady
   revisionHistoryLimit: 10
   persistentVolumeClaimRetentionPolicy:
@@ -41,16 +40,12 @@ spec:
       partition: 0
   selector:
     matchLabels:
-      app.kubernetes.io/name: mem0-postgres
+      app.kubernetes.io/name: honcho-postgres
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: mem0-postgres
+        app.kubernetes.io/name: honcho-postgres
     spec:
-      # Apiserver-defaulted PodSpec fields. Argo's normalizer fills these
-      # in for Deployments but not for StatefulSet pod templates, so the
-      # StatefulSet pins to OutOfSync every reconcile until we spell them
-      # out. Same root cause as the podManagementPolicy fix above.
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -58,7 +53,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: postgres
-          image: ankane/pgvector:v0.5.1
+          image: pgvector/pgvector:pg15
           imagePullPolicy: IfNotPresent
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
@@ -68,16 +63,14 @@ spec:
               protocol: TCP
           env:
             - name: POSTGRES_USER
-              value: postgres
+              value: honcho
             - name: POSTGRES_DB
-              value: postgres
+              value: honcho
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mem0-secrets
+                  name: honcho-secrets
                   key: POSTGRES_PASSWORD
-            # PGDATA points at a subdir so the PVC root stays clean and the
-            # initdb safety check (must be empty) doesn't trip on lost+found.
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
@@ -90,7 +83,7 @@ spec:
               mountPath: /dev/shm
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
+              command: ["pg_isready", "-U", "honcho", "-d", "honcho"]
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 1
@@ -98,7 +91,7 @@ spec:
             failureThreshold: 3
           livenessProbe:
             exec:
-              command: ["pg_isready", "-U", "postgres", "-d", "postgres"]
+              command: ["pg_isready", "-U", "honcho", "-d", "honcho"]
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 1
@@ -113,16 +106,13 @@ spec:
       volumes:
         - name: init
           configMap:
-            name: mem0-postgres-init
+            name: honcho-postgres-init
             defaultMode: 420
         - name: dshm
           emptyDir:
             medium: Memory
             sizeLimit: 128Mi
   volumeClaimTemplates:
-    # apiVersion/kind/volumeMode are apiserver defaults on embedded PVC
-    # templates; Argo's StatefulSet normalizer doesn't fill them in, so
-    # without them the StatefulSet drifts on every reconcile.
     - apiVersion: v1
       kind: PersistentVolumeClaim
       metadata:

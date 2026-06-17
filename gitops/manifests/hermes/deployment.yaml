@@ -175,6 +175,16 @@ spec:
               mountPath: /opt/data/config.yaml
               subPath: config.yaml
               readOnly: true
+            # Honcho per-host config (peerName, workspace, recallMode, …).
+            # Hermes reads $HERMES_HOME/honcho.json when memory.provider is
+            # set to honcho. Same ConfigMap as config.yaml — separate
+            # subPath mount so each file is independently materialized.
+            # subPath mounts freeze at pod start: rollout-restart after
+            # editing the ConfigMap (CLAUDE.md fast inner-loop pattern).
+            - name: app-config
+              mountPath: /opt/data/honcho.json
+              subPath: honcho.json
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:

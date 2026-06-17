@@ -33,18 +33,6 @@ data:
     [
       {
         "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-        "name": "mem0.mem0-mcp/memory",
-        "description": "Cross-session user facts via Mem0+pgvector: add, search, get, list, update, delete.",
-        "version": "1.0.0",
-        "remotes": [
-          {
-            "type": "streamable-http",
-            "url": "http://mem0-mcp.mem0:8080/mcp/"
-          }
-        ]
-      },
-      {
-        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
         "name": "news.news-mcp/articles",
         "description": "Semantic search, briefings, and read/star tools over your FreshRSS articles in pgvector.",
         "version": "2.0.0",

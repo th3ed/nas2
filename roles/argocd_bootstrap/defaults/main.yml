@@ -3,6 +3,11 @@ argocd_namespace: argocd
 argocd_chart_version: "7.7.10"
 argocd_chart_repo: "https://argoproj.github.io/argo-helm"
 
+# Listed in bitwarden_namespaces below; argocd_bootstrap pre-creates the
+# bw-auth-token Secret in each namespace so sm-operator can reconcile
+# BitwardenSecret CRDs without a first-sync race (see
+# memory/project_smoperator_first_sync.md).
+
 # Override in group_vars/all/main.yml
 gitops_repo_url: "https://github.com/th3ed/nas2.git"
 gitops_repo_branch: "main"
@@ -17,3 +22,4 @@ bitwarden_namespaces:
   - agentregistry
   - mem0
   - news
+  - honcho

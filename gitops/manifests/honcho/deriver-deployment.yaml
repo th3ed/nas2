@@ -1,0 +1,79 @@
+---
+# Honcho deriver — the background worker that processes the message queue
+# and extracts user-model facts via LLM calls. Same image as the api,
+# different command (`uv run python -m src.deriver` per upstream
+# docker-compose.yml.example). No HTTP port; reads from the DB queue.
+#
+# All env mirrors honcho-api so the deriver shares the same DB connection
+# and LLM routing. The deriver inherits the same Qwen3.5 reliability
+# ceiling documented on the api deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: honcho-deriver
+  namespace: honcho
+  labels:
+    app.kubernetes.io/name: honcho-deriver
+    app.kubernetes.io/component: deriver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: honcho-deriver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: honcho-deriver
+        app.kubernetes.io/component: deriver
+    spec:
+      containers:
+        - name: honcho-deriver
+          image: ghcr.io/plastic-labs/honcho:v2.0.3
+          imagePullPolicy: IfNotPresent
+          # Upstream docker-compose.yml.example entrypoint, verbatim.
+          command: ["uv", "run", "python", "-m", "src.deriver"]
+          envFrom:
+            - secretRef:
+                name: honcho-secrets
+                optional: false
+          env:
+            - name: DB_CONNECTION_URI
+              value: postgresql+psycopg://honcho:$(POSTGRES_PASSWORD)@honcho-postgres.honcho:5432/honcho
+            - name: AUTH_USE_AUTH
+              value: "false"
+            - name: LLM_OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: LLM_OPENAI_COMPATIBLE_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: LLM_OPENAI_COMPATIBLE_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: OPENAI_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: LLM_DIALECTIC_PROVIDER
+              value: openai
+            - name: LLM_DIALECTIC_MODEL
+              value: qwen3.5:9b
+            - name: LLM_QUERY_GENERATION_PROVIDER
+              value: openai
+            - name: LLM_QUERY_GENERATION_MODEL
+              value: qwen3.5:9b
+            - name: LLM_TOM_INFERENCE_PROVIDER
+              value: openai
+            - name: LLM_TOM_INFERENCE_MODEL
+              value: qwen3.5:9b
+            - name: LLM_SUMMARY_PROVIDER
+              value: openai
+            - name: LLM_SUMMARY_MODEL
+              value: qwen3.5:9b
+            - name: LOG_LEVEL
+              value: INFO
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi

@@ -1,0 +1,36 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: honcho
+  namespace: argocd
+  annotations:
+    # Bring Honcho up at wave 15 (after sm-operator at -5 but before hermes
+    # at 20). Hermes's `memory.provider: honcho` config does a startup-time
+    # connect to http://api.honcho:8000; running both in the same wave races.
+    argocd.argoproj.io/sync-wave: "15"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/th3ed/nas2.git
+    targetRevision: main
+    path: gitops/manifests/honcho
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: honcho
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    # Same StatefulSet + PVC drift sources as mem0's postgres — apiserver
+    # defaults that Argo's normalizer doesn't reach into.
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates

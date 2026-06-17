@@ -1,0 +1,127 @@
+---
+# Honcho API server — the upstream-published image at
+# `ghcr.io/plastic-labs/honcho:v2.0.3` (multi-arch, attested by their
+# `.github/workflows/docker-build.yml`). Pinned to a tagged release rather
+# than `:latest` so reconciles are reproducible; Renovate tracks Honcho's
+# v* tags and opens PRs for bumps.
+#
+# Architecture mirrors upstream docker-compose.yml.example: this Deployment
+# is the FastAPI server (default entrypoint), the deriver Deployment runs
+# `uv run python -m src.deriver` against the same DB. No Redis — v2.0.3's
+# compose doesn't include one.
+#
+# Auth: AUTH_USE_AUTH defaults to false in upstream's config.py — explicit
+# here for clarity. The network (cluster ClusterIP + Tailscale namespace
+# scoping) IS the auth boundary in this homelab; Honcho only listens
+# inside the cluster.
+#
+# LLM routing: Honcho's deriver / dialectic / summary / query-generation
+# all need an LLM. We point them at our in-cluster LiteLLM proxy via
+# `LLM_OPENAI_COMPATIBLE_BASE_URL` (Honcho's own config knob, see
+# src/config.py LLMSettings) AND the bare `OPENAI_BASE_URL` env var that
+# the openai-python SDK reads at client-construction time (belt + suspenders
+# in case Honcho's openai-compatible path uses one or the other). Every
+# section is set to provider=openai + model=qwen3.5:9b so all LLM calls
+# go through our local Qwen3.5 via LiteLLM.
+#
+# Reliability caveat: documented community threshold for Honcho's deriver
+# is >=14B for reliable function-calling. Qwen3.5 9B is below that — see
+# CLAUDE.md gotcha. Same ceiling that bit mem0's fact extraction;
+# accepted per user direction.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: honcho-api
+  namespace: honcho
+  labels:
+    app.kubernetes.io/name: honcho-api
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: honcho-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: honcho-api
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: honcho
+          image: ghcr.io/plastic-labs/honcho:v2.0.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: honcho-secrets
+                optional: false
+          env:
+            # Database — upstream requires the psycopg-prefixed SQLAlchemy
+            # URI shape; the $(VAR) interpolation picks up POSTGRES_PASSWORD
+            # from the envFrom-injected honcho-secrets.
+            - name: DB_CONNECTION_URI
+              value: postgresql+psycopg://honcho:$(POSTGRES_PASSWORD)@honcho-postgres.honcho:5432/honcho
+            - name: AUTH_USE_AUTH
+              value: "false"
+            # OpenAI-compatible routing to our LiteLLM proxy.
+            - name: LLM_OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: LLM_OPENAI_COMPATIBLE_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: LLM_OPENAI_COMPATIBLE_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            # openai-python SDK reads these directly when constructing
+            # its default client; covers code paths that bypass Honcho's
+            # own LLM_OPENAI_COMPATIBLE_BASE_URL plumbing.
+            - name: OPENAI_API_KEY
+              value: $(LITELLM_API_KEY)
+            - name: OPENAI_BASE_URL
+              value: http://litellm.litellm:4000/v1
+            # All LLM sections routed through Qwen3.5 via LiteLLM.
+            - name: LLM_DIALECTIC_PROVIDER
+              value: openai
+            - name: LLM_DIALECTIC_MODEL
+              value: qwen3.5:9b
+            - name: LLM_QUERY_GENERATION_PROVIDER
+              value: openai
+            - name: LLM_QUERY_GENERATION_MODEL
+              value: qwen3.5:9b
+            - name: LLM_TOM_INFERENCE_PROVIDER
+              value: openai
+            - name: LLM_TOM_INFERENCE_MODEL
+              value: qwen3.5:9b
+            - name: LLM_SUMMARY_PROVIDER
+              value: openai
+            - name: LLM_SUMMARY_MODEL
+              value: qwen3.5:9b
+            - name: FASTAPI_HOST
+              value: 0.0.0.0
+            - name: FASTAPI_PORT
+              value: "8000"
+            - name: LOG_LEVEL
+              value: INFO
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi

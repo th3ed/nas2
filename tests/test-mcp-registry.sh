@@ -6,7 +6,11 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-TITLE="mcp-registry: memory server in AgentRegistry catalog"
+TITLE="mcp-registry: mem0 server deregistered from AgentRegistry catalog"
+# After switching Hermes memory from mem0-via-MCP to the native Honcho
+# provider, the mem0.mem0-mcp/memory entry must no longer be in the
+# catalog. The Argo registry-sync Sync hook deregisters entries removed
+# from gitops/manifests/agentregistry/mcp-server-catalog.yaml.
 body=$(ssh_kubectl "get --raw '/api/v1/namespaces/agentregistry/services/agentregistry:http/proxy/v0/servers'") || {
     fail "$TITLE: API proxy failed: $body"
     exit 1
@@ -16,8 +20,8 @@ count=$(printf '%s' "$body" | python3 -c \
     fail "$TITLE: failed to parse /v0/servers response"
     exit 1
 }
-if [[ "$count" != "1" ]]; then
-    fail "$TITLE: memory server occurrences=$count (expected 1)"
+if [[ "$count" != "0" ]]; then
+    fail "$TITLE: mem0.mem0-mcp/memory still present (count=$count, expected 0)"
     exit 1
 fi
 pass "$TITLE"
