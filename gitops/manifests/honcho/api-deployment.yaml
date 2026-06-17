@@ -121,23 +121,42 @@ spec:
               value: $(LITELLM_API_KEY)
             - name: OPENAI_BASE_URL
               value: http://litellm.litellm:4000/v1
-            # All LLM sections routed through Qwen3.5 via LiteLLM.
-            - name: LLM_DIALECTIC_PROVIDER
+            # Honcho v3 uses nested per-section MODEL_CONFIG envs (the old v2
+            # LLM_<SECTION>_PROVIDER/MODEL pattern was removed at v3).
+            # Each section's transport=openai + model=qwen3.5:9b routes
+            # everything through our LiteLLM. OVERRIDES__BASE_URL is what
+            # the openai client uses to find LiteLLM.
+            - name: DERIVER_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_DIALECTIC_MODEL
+            - name: DERIVER_MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_QUERY_GENERATION_PROVIDER
+            - name: DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_QUERY_GENERATION_MODEL
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_TOM_INFERENCE_PROVIDER
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: SUMMARY_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_TOM_INFERENCE_MODEL
+            - name: SUMMARY_MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_SUMMARY_PROVIDER
+            - name: SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            # Embeddings: nomic-embed-text via the existing LiteLLM
+            # `text-embedding-3-small` alias is 768-dim, NOT the OpenAI
+            # default 1536. VECTOR_DIMENSIONS sets the pgvector column
+            # shape (only effective on a clean DB — schema is locked at
+            # initial migrate).
+            - name: EMBEDDING_VECTOR_DIMENSIONS
+              value: "768"
+            - name: EMBEDDING_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_SUMMARY_MODEL
-              value: qwen3.5:9b
+            - name: EMBEDDING_MODEL_CONFIG__MODEL
+              value: text-embedding-3-small
+            - name: EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
             - name: FASTAPI_HOST
               value: 0.0.0.0
             - name: FASTAPI_PORT

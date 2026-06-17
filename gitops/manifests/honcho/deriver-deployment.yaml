@@ -59,22 +59,33 @@ spec:
               value: $(LITELLM_API_KEY)
             - name: OPENAI_BASE_URL
               value: http://litellm.litellm:4000/v1
-            - name: LLM_DIALECTIC_PROVIDER
+            # See api-deployment.yaml for the v3 nested-env rationale.
+            - name: DERIVER_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_DIALECTIC_MODEL
+            - name: DERIVER_MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_QUERY_GENERATION_PROVIDER
+            - name: DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_QUERY_GENERATION_MODEL
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_TOM_INFERENCE_PROVIDER
+            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: SUMMARY_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_TOM_INFERENCE_MODEL
+            - name: SUMMARY_MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: LLM_SUMMARY_PROVIDER
+            - name: SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: EMBEDDING_VECTOR_DIMENSIONS
+              value: "768"
+            - name: EMBEDDING_MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: LLM_SUMMARY_MODEL
-              value: qwen3.5:9b
+            - name: EMBEDDING_MODEL_CONFIG__MODEL
+              value: text-embedding-3-small
+            - name: EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
             - name: LOG_LEVEL
               value: INFO
           resources:
