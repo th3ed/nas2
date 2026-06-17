@@ -43,13 +43,18 @@ pass "$TITLE"
 
 TITLE="honcho: api Service resolves on port 8000"
 # Honcho api Service must be ClusterIP on port 8000 so Hermes's honcho.json
-# baseUrl=http://api.honcho:8000 resolves correctly.
-svc=$(ssh_kubectl "-n honcho get service api -o jsonpath={.spec.ports[0].port}") || {
-    fail "$TITLE: kubectl get service failed: $svc"
+# baseUrl=http://api.honcho:8000 resolves correctly. Using awk on the wide
+# output to dodge the brace-glob problem zsh has with jsonpath through the
+# ssh round-trip (same workaround the routing test uses for config.yaml).
+out=$(ssh_kubectl "-n honcho get service api --no-headers") || {
+    fail "$TITLE: kubectl get service failed: $out"
     exit 1
 }
-if [[ "$svc" != "8000" ]]; then
-    fail "$TITLE: api Service port=$svc (expected 8000)"
-    exit 1
-fi
-pass "$TITLE"
+port=$(printf '%s\n' "$out" | awk '{print $5}')
+case "$port" in
+    *8000*) pass "$TITLE" ;;
+    *)
+        fail "$TITLE: expected 8000 in PORTS column, got '$port' (full: $out)"
+        exit 1
+        ;;
+esac
