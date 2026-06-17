@@ -132,11 +132,42 @@ spec:
               value: qwen3.5:9b
             - name: DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL
               value: http://litellm.litellm:4000/v1
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__TRANSPORT
+            # DialecticSettings.LEVELS is a dict keyed by ReasoningLevel
+            # literals {minimal, low, medium, high, max}; pydantic validates
+            # the keys and requires ALL five present after merge. Overriding
+            # only "base" was a guess and pydantic rejected it. Override the
+            # MODEL_CONFIG on every level so dialectic calls don't fall
+            # through to the gpt-5.4-mini default (which isn't in our
+            # LiteLLM catalog).
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__MODEL
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__OVERRIDES__BASE_URL
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__OVERRIDES__BASE_URL
               value: http://litellm.litellm:4000/v1
             - name: SUMMARY_MODEL_CONFIG__TRANSPORT
               value: openai

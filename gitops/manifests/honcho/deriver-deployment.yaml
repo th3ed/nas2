@@ -66,11 +66,36 @@ spec:
               value: qwen3.5:9b
             - name: DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL
               value: http://litellm.litellm:4000/v1
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__TRANSPORT
+            # See api-deployment.yaml — all 5 ReasoningLevel keys required.
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__TRANSPORT
               value: openai
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__MODEL
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__MODEL
               value: qwen3.5:9b
-            - name: DIALECTIC_LEVELS__BASE__MODEL_CONFIG__OVERRIDES__BASE_URL
+            - name: DIALECTIC_LEVELS__MINIMAL__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__LOW__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__MEDIUM__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__HIGH__MODEL_CONFIG__OVERRIDES__BASE_URL
+              value: http://litellm.litellm:4000/v1
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__TRANSPORT
+              value: openai
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__MODEL
+              value: qwen3.5:9b
+            - name: DIALECTIC_LEVELS__MAX__MODEL_CONFIG__OVERRIDES__BASE_URL
               value: http://litellm.litellm:4000/v1
             - name: SUMMARY_MODEL_CONFIG__TRANSPORT
               value: openai
